@@ -93,8 +93,11 @@ begin
   begin
     WizardForm.StatusLabel.Caption := CustomMessage('Setup');
     repeat
+      // Success means the exit code AND the files it must leave behind: never trust one alone.
       Ok := Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup.ps1') + '"',
-                 ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, Code) and (Code = 0);
+                 ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, Code) and (Code = 0)
+            and FileExists(ExpandConstant('{app}\.venv\Scripts\pythonw.exe'))
+            and FileExists(ExpandConstant('{app}\bin\mouthpiece.cmd'));
     until Ok or (SuppressibleMsgBox(FmtMessage(CustomMessage('SetupFailed'), [ExpandConstant('{app}\setup.log')]),
                                     mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY);
     if not Ok then

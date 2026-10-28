@@ -44,8 +44,11 @@ jobs:
           $setupLog = Join-Path $env:LOCALAPPDATA 'Programs\Mouthpiece\setup.log'
           if (Test-Path $setupLog) { Get-Content $setupLog -Tail 40 }
           if ($p.ExitCode -ne 0) { Get-Content install.log -Tail 60; throw "installer exited with $($p.ExitCode)" }
+          $app = Join-Path $env:LOCALAPPDATA 'Programs\Mouthpiece'
           $shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Mouthpiece.lnk'
-          if (-not (Test-Path $shortcut)) { throw 'Start menu shortcut missing' }
+          foreach ($f in @($shortcut, "$app\.venv\Scripts\pythonw.exe", "$app\bin\mouthpiece.cmd")) {
+            if (-not (Test-Path $f)) { throw "missing after install: $f" }
+          }
 
       - name: Smoke test (create a voice, speak a line)
         shell: pwsh

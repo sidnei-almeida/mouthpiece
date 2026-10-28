@@ -7,6 +7,14 @@
 # MOUTHPIECE_BACKEND=xpu|cu130|cu126|cpu overrides step 2.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'  # Invoke-WebRequest's progress bar slows downloads to a crawl
+# Started from PowerShell 7 (or anything that set it), Windows PowerShell inherits PSModulePath and
+# then fails to load its own modules ("member ... is already present"). Use its default paths.
+$env:PSModulePath = @(
+    (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Modules'),
+    (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'),
+    (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\Modules')
+) -join ';'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $App = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Bin = Join-Path $App 'bin'
 $Log = Join-Path $App 'setup.log'
@@ -24,19 +32,27 @@ try {
     Write-Host 'Isto baixa o Python, o PyTorch e o modelo de voz: alguns GB. Pode levar varios minutos.'
 
     Step 'uv (gerenciador de Python)'
+    # Straight from uv's GitHub release: no installer script, no PowerShell modules involved.
     $Uv = Join-Path $Bin 'uv.exe'
     if (-not (Test-Path $Uv)) {
         New-Item -ItemType Directory -Force -Path $Bin | Out-Null
-        $env:UV_INSTALL_DIR = $Bin
-        $env:UV_NO_MODIFY_PATH = '1'
-        Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+        $zip = Join-Path $env:TEMP 'mouthpiece-uv.zip'
+        (New-Object Net.WebClient).DownloadFile('https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip', $zip)
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+        try {
+            foreach ($entry in $archive.Entries | Where-Object { $_.Name -in 'uv.exe', 'uvx.exe' }) {
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $Bin $entry.Name), $true)
+            }
+        } finally { $archive.Dispose(); Remove-Item $zip -ErrorAction SilentlyContinue }
     }
     if (-not (Test-Path $Uv)) { throw 'nao consegui instalar o uv' }
+    Write-Host ('  ' + (& $Uv --version))
 
     Step 'Placa de video'
     $Backend = $env:MOUTHPIECE_BACKEND
     if (-not $Backend) {
-        $gpus = @(Get-CimInstance Win32_VideoController | ForEach-Object { $_.Name })
+        $gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
         Write-Host ('  encontrada: ' + ($gpus -join ', '))
         if ($gpus -match 'NVIDIA') {
             $driver = 0
@@ -72,6 +88,9 @@ try {
         [Environment]::SetEnvironmentVariable('Path', (($path.TrimEnd(';') + ';' + $Bin).TrimStart(';')), 'User')
     }
 
+    foreach ($needed in @($Py, (Join-Path $Venv 'Scripts\pythonw.exe'), (Join-Path $Bin 'mouthpiece.cmd'))) {
+        if (-not (Test-Path $needed)) { throw "faltou criar $needed" }
+    }
     Write-Host "`nPronto." -ForegroundColor Green
     Stop-Transcript | Out-Null
     exit 0
