@@ -112,16 +112,10 @@ Depois é só pedir, por exemplo: *"gera uma narração para essa cena explicand
 
 ## Como funciona
 
-```mermaid
-flowchart LR
-  A[Navegador] -- texto --> S[Servidor local<br>127.0.0.1:7860]
-  C[mouthpiece CLI] -- texto --> S
-  S -- frases --> M[Qwen3-TTS<br>na placa de vídeo]
-  V[(Sua voz<br>referência de 30 s)] --> M
-  M -- áudio --> F[Acabamento<br>-16 LUFS, 48 kHz]
-  F -- WAV --> A
-  F -- WAV --> C
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/como-funciona-dark.svg">
+  <img src="docs/como-funciona.svg" alt="Navegador ou terminal mandam o texto ao servidor local, que usa o Qwen3-TTS na placa de vídeo com a sua voz de referência; o áudio passa pelo acabamento e vira um WAV pronto" width="100%">
+</picture>
 
 - **Modelo:** [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 1.7B (clonagem de voz), fixado numa
   revisão exata para a voz não mudar sem aviso.

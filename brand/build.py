@@ -189,6 +189,50 @@ def sheet(logo: Path, icon: Path, font: TTFont):
     out.unlink()
 
 
+def diagram():
+    """docs/como-funciona(-dark).svg: how a line of text becomes a WAV, in the brand's style. Drawn
+    here instead of Mermaid so it renders the same everywhere; the README picks the version that
+    matches the reader's theme."""
+    inter = static_font('Inter-VF.ttf', 600)
+    inter_r = static_font('Inter-VF.ttf', 400)
+    W, H = 1200, 330
+    boxes = [  # x, y, w, h, title, subtitle, accent
+        (20, 40, 230, 96, 'Navegador', 'o app em 127.0.0.1', False),
+        (20, 194, 230, 96, 'Terminal', 'mouthpiece say, Claude Code', False),
+        (330, 40, 230, 250, 'Servidor local', 'só aceita este computador', False),
+        (640, 40, 230, 120, 'Qwen3-TTS', 'na placa de vídeo', False),
+        (640, 210, 230, 80, 'Sua voz', 'até 30 s de referência', False),
+        (950, 40, 230, 120, 'Acabamento', '-16 LUFS · 48 kHz · 24 bits', False),
+        (950, 210, 230, 80, 'WAV pronto', 'para a edição', True),
+    ]
+    arrows = [  # x1, y1, x2, y2
+        (250, 88, 330, 88), (250, 242, 330, 242), (560, 100, 640, 100), (755, 210, 755, 160),
+        (870, 100, 950, 100), (1065, 160, 1065, 210),
+    ]
+    # Small labels on the server box: what it does with the text.
+    notes = ['divide em frases', 'aplica a pronúncia', 'uma geração por vez', 'vigia a placa']
+    for suffix, fg, sub, box, stroke, arrow in (('', INK, ASH, '#FFFFFF', LINE, ASH),
+                                               ('-dark', PAPER, ASH, '#1A1C20', GRAPHITE, ASH)):
+        parts = ['<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
+                 f'orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="{arrow}"/></marker></defs>']
+        for x1, y1, x2, y2 in arrows:
+            parts.append(f'<line x1="{x1}" y1="{y1}" x2="{x2 - 2 if x2 > x1 else x2}" y2="{y2 + 2 if y2 < y1 else y2}" '
+                         f'stroke="{arrow}" stroke-width="2" marker-end="url(#a)"/>')
+        for x, y, w, h, title, subtitle, accent in boxes:
+            parts.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="14" fill="{box}" '
+                         f'stroke="{SIGNAL if accent else stroke}" stroke-width="{2 if accent else 1.5}"/>')
+            d, _, _ = text_path(title, inter, 22)
+            parts.append(f'<path transform="translate({x + 22} {y + 42})" d="{d}" fill="{fg}"/>')
+            d, _, _ = text_path(subtitle, inter_r, 15)
+            parts.append(f'<path transform="translate({x + 22} {y + 68})" d="{d}" fill="{sub}"/>')
+        for i, note in enumerate(notes):
+            d, _, _ = text_path(note, inter_r, 15)
+            parts.append(f'<circle cx="{358}" cy="{148 + i * 34 - 5}" r="3" fill="{SIGNAL}"/>')
+            parts.append(f'<path transform="translate(370 {148 + i * 34})" d="{d}" fill="{fg}"/>')
+        (HERE.parent / 'docs' / f'como-funciona{suffix}.svg').write_text(svg(W, H, '\n  '.join(parts)))
+
+
 if __name__ == '__main__':
     build()
+    diagram()
     print('brand kit built in', HERE)
