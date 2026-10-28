@@ -79,6 +79,6 @@ try {
     Write-Host "`nA instalacao falhou: $_" -ForegroundColor Red
     Write-Host "Detalhes em: $Log"
     Stop-Transcript | Out-Null
-    Read-Host 'Enter para fechar'
+    if (-not $env:CI -and -not $env:MOUTHPIECE_SILENT) { Read-Host 'Enter para fechar' }
     exit 1
 }

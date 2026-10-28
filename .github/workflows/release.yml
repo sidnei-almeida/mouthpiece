@@ -1,0 +1,118 @@
+# Builds the Windows installer and the Linux package, installs each one on a clean machine, creates a
+# voice and speaks a line with it (CPU: the runners have no GPU), and only then publishes the release.
+# Push a tag to release:  git tag v1.0.1 && git push origin v1.0.1
+# "Run workflow" (manual) does everything except publishing, to test the installers.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0-test' }
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc "/DAppVersion=$env:VERSION" install\windows\mouthpiece.iss
+          if ($LASTEXITCODE) { exit 1 }
+          Get-ChildItem dist
+
+      - name: Install it (silent, CPU)
+        shell: pwsh
+        env:
+          MOUTHPIECE_BACKEND: cpu
+        run: |
+          $exe = (Get-ChildItem dist\Mouthpiece-Setup-*.exe).FullName
+          $p = Start-Process $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LOG=install.log' -Wait -PassThru
+          $setupLog = Join-Path $env:LOCALAPPDATA 'Programs\Mouthpiece\setup.log'
+          if (Test-Path $setupLog) { Get-Content $setupLog -Tail 40 }
+          if ($p.ExitCode -ne 0) { Get-Content install.log -Tail 60; throw "installer exited with $($p.ExitCode)" }
+          $shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Mouthpiece.lnk'
+          if (-not (Test-Path $shortcut)) { throw 'Start menu shortcut missing' }
+
+      - name: Smoke test (create a voice, speak a line)
+        shell: pwsh
+        run: tests\smoke.ps1
+
+      - name: Server log
+        if: always()
+        shell: pwsh
+        run: Get-Content (Join-Path $env:LOCALAPPDATA 'Mouthpiece\server.log') -Tail 60 -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.exe
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        run: echo "VERSION=$([ "$GITHUB_REF_TYPE" = tag ] && echo "${GITHUB_REF_NAME#v}" || echo 0.0.0-test)" >> "$GITHUB_ENV"
+
+      - name: Package
+        run: install/linux/package.sh "$VERSION"
+
+      - name: Install it (CPU)
+        env:
+          MOUTHPIECE_BACKEND: cpu
+        run: |
+          mkdir -p /tmp/mp && tar -C /tmp/mp -xzf dist/mouthpiece-*-linux.tar.gz
+          /tmp/mp/mouthpiece-*-linux/install.sh
+
+      - name: Smoke test (create a voice, speak a line)
+        run: MOUTHPIECE="$HOME/.local/bin/mouthpiece" tests/smoke.sh
+
+      - name: Server log
+        if: always()
+        run: tail -n 60 ~/.cache/mouthpiece/server.log || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*.tar.gz
+
+  release:
+    needs: [windows, linux]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<NOTES
+          **your voice, typed.** Type some text and hear it in your own voice, on your own computer.
+
+          ### Download
+          - **Windows 10/11:** \`$(cd dist && ls Mouthpiece-Setup-*.exe)\`: run it, it sets everything up (a few GB download).
+          - **Linux:** \`$(cd dist && ls mouthpiece-*-linux.tar.gz)\`: extract and run \`./install.sh\`.
+
+          Both were installed on a clean machine and tested (voice created, line spoken) before this release was published.
+          Works best on an Intel Arc or NVIDIA GPU; falls back to the CPU (slower).
+          NOTES
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Mouthpiece $GITHUB_REF_NAME" --notes-file notes.md

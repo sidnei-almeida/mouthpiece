@@ -8,6 +8,8 @@ the model loads once and stays on the GPU between calls. Standard library only; 
     mouthpiece say -f script.txt -o narration.wav        (or text on stdin: echo "..." | mouthpiece say -)
     mouthpiece open | status | stop
     mouthpiece voices
+    mouthpiece voice add gravacao.wav --name "minha voz" --lang pt
+    mouthpiece voice rm minha-voz-pt.wav
     mouthpiece pronuncia                                  (list rules)
     mouthpiece pronuncia add "Alien: Isolation" "Alien Isolation"
 
@@ -217,6 +219,25 @@ def cmd_voices(_):
         print('no voices yet: create one in the app (mouthpiece open, then "Vozes")')
 
 
+def cmd_voice(a):
+    ensure_server(wait=False)  # creating a voice doesn't need the model
+    if a.action == 'add':
+        body = Path(a.path).read_bytes()
+        query = urllib.parse.urlencode({'name': a.name or Path(a.path).stem, 'lang': a.lang})
+        req = urllib.request.Request(f'{URL}/api/voices?{query}', data=body, method='POST',
+                                     headers={'Content-Type': 'application/octet-stream', 'X-Mouthpiece': '1'})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                v = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            sys.exit(f'error: {json.loads(e.read()).get("detail", e)}')
+        print(v['name'])
+        err(f'{v["speech"]} s of speech found; the clone uses {v["seconds"]} s')
+    else:
+        api('DELETE', f'/api/voices/{urllib.parse.quote(a.path)}')
+        print('removed')
+
+
 def cmd_pronuncia(a):
     if a.action in ('add', 'rm') and not a.de:
         sys.exit(f'usage: mouthpiece pronuncia {a.action} "written"' + (' "spoken"' if a.action == 'add' else ''))
@@ -249,6 +270,12 @@ def main():
     sub.add_parser('status').set_defaults(fn=cmd_status)
     sub.add_parser('stop', help='shut the server down and free the GPU').set_defaults(fn=cmd_stop)
     sub.add_parser('voices', help='list the voices').set_defaults(fn=cmd_voices)
+    vo = sub.add_parser('voice', help='create a voice from a recording, or remove one')
+    vo.add_argument('action', choices=['add', 'rm'])
+    vo.add_argument('path', help='add: the recording (WAV, FLAC, OGG, MP3); rm: the voice name')
+    vo.add_argument('--name', help='add: the voice name (default: the file name)')
+    vo.add_argument('--lang', choices=['en', 'pt'], default='en')
+    vo.set_defaults(fn=cmd_voice)
     pr = sub.add_parser('pronuncia', help='pronunciation rules')
     pr.add_argument('action', nargs='?', choices=['list', 'add', 'rm'], default='list')
     pr.add_argument('de', nargs='?')

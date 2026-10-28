@@ -3,7 +3,9 @@
 ; Python, the PyTorch build for the GPU and the voice model (several GB, so they aren't bundled).
 
 #define AppName "Mouthpiece"
-#define AppVersion "1.0.0"
+#ifndef AppVersion
+  #define AppVersion "1.0.0"
+#endif
 #define Root "..\.."
 
 [Setup]
@@ -41,8 +43,8 @@ pt.Desktop=Criar um atalho na Área de Trabalho
 en.Desktop=Create a desktop shortcut
 pt.Setup=Baixando o Python, o PyTorch e o modelo de voz (alguns GB). Acompanhe na janela que abriu; pode levar vários minutos.
 en.Setup=Downloading Python, PyTorch and the voice model (a few GB). Follow along in the window that opened; this can take several minutes.
-pt.SetupFailed=A instalação dos componentes falhou. Veja o arquivo de log:%n%1%n%nVocê pode tentar de novo depois rodando setup.ps1 na pasta do app.
-en.SetupFailed=Installing the components failed. See the log:%n%1%n%nYou can retry later by running setup.ps1 in the app folder.
+pt.SetupFailed=A instalação dos componentes falhou (sem internet?). Veja o arquivo de log:%n%1%n%nTentar de novo?
+en.SetupFailed=Installing the components failed (no internet?). See the log:%n%1%n%nTry again?
 pt.Open=Abrir o Mouthpiece
 en.Open=Open Mouthpiece
 
@@ -80,20 +82,22 @@ Type: filesandordirs; Name: "{app}\__pycache__"
 Type: files; Name: "{app}\setup.log"
 
 [Code]
-// Runs setup.ps1 in a visible console (so the long download shows progress) and stops with a clear
-// message if it fails, instead of leaving shortcuts that point at a missing Python.
+// Runs setup.ps1 in a visible console (so the long download shows progress). If it fails, offers to
+// retry; a silent install (/VERYSILENT) gives up instead and exits with an error code.
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
+  Ok: Boolean;
 begin
   if CurStep = ssPostInstall then
   begin
     WizardForm.StatusLabel.Caption := CustomMessage('Setup');
-    if not Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup.ps1') + '"',
-                ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, Code) or (Code <> 0) then
-    begin
-      MsgBox(FmtMessage(CustomMessage('SetupFailed'), [ExpandConstant('{app}\setup.log')]), mbError, MB_OK);
-      Abort;
-    end;
+    repeat
+      Ok := Exec('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup.ps1') + '"',
+                 ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, Code) and (Code = 0);
+    until Ok or (SuppressibleMsgBox(FmtMessage(CustomMessage('SetupFailed'), [ExpandConstant('{app}\setup.log')]),
+                                    mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY);
+    if not Ok then
+      RaiseException('setup.ps1 failed; see ' + ExpandConstant('{app}\setup.log'));
   end;
 end;

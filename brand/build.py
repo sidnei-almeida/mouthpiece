@@ -189,28 +189,46 @@ def sheet(logo: Path, icon: Path, font: TTFont):
     out.unlink()
 
 
+DIAGRAM_TEXT = {
+    'how-it-works': {
+        'boxes': [('Browser', 'the app at 127.0.0.1'), ('Terminal', 'mouthpiece say, Claude Code'),
+                  ('Local server', 'only this computer'), ('Qwen3-TTS', 'on your GPU'),
+                  ('Your voice', 'up to 30 s reference'), ('Finishing', '-16 LUFS · 48 kHz · 24-bit'),
+                  ('WAV ready', 'for your edit')],
+        'notes': ['splits into sentences', 'applies pronunciation', 'one job at a time', 'watches the GPU'],
+    },
+    'como-funciona': {
+        'boxes': [('Navegador', 'o app em 127.0.0.1'), ('Terminal', 'mouthpiece say, Claude Code'),
+                  ('Servidor local', 'só aceita este computador'), ('Qwen3-TTS', 'na placa de vídeo'),
+                  ('Sua voz', 'até 30 s de referência'), ('Acabamento', '-16 LUFS · 48 kHz · 24 bits'),
+                  ('WAV pronto', 'para a edição')],
+        'notes': ['divide em frases', 'aplica a pronúncia', 'uma geração por vez', 'vigia a placa'],
+    },
+}
+
+
 def diagram():
-    """docs/como-funciona(-dark).svg: how a line of text becomes a WAV, in the brand's style. Drawn
-    here instead of Mermaid so it renders the same everywhere; the README picks the version that
-    matches the reader's theme."""
+    """docs/how-it-works(-dark).svg and its Portuguese twin, docs/como-funciona(-dark).svg: how a line
+    of text becomes a WAV, in the brand's style. Drawn here instead of Mermaid so it renders the same
+    everywhere; the READMEs pick the version that matches the reader's theme."""
+    for name, text in DIAGRAM_TEXT.items():
+        diagram_one(name, text)
+
+
+def diagram_one(name: str, text: dict):
     inter = static_font('Inter-VF.ttf', 600)
     inter_r = static_font('Inter-VF.ttf', 400)
     W, H = 1200, 330
-    boxes = [  # x, y, w, h, title, subtitle, accent
-        (20, 40, 230, 96, 'Navegador', 'o app em 127.0.0.1', False),
-        (20, 194, 230, 96, 'Terminal', 'mouthpiece say, Claude Code', False),
-        (330, 40, 230, 250, 'Servidor local', 'só aceita este computador', False),
-        (640, 40, 230, 120, 'Qwen3-TTS', 'na placa de vídeo', False),
-        (640, 210, 230, 80, 'Sua voz', 'até 30 s de referência', False),
-        (950, 40, 230, 120, 'Acabamento', '-16 LUFS · 48 kHz · 24 bits', False),
-        (950, 210, 230, 80, 'WAV pronto', 'para a edição', True),
-    ]
+    geometry = [(20, 40, 230, 96), (20, 194, 230, 96), (330, 40, 230, 250), (640, 40, 230, 120),
+                (640, 210, 230, 80), (950, 40, 230, 120), (950, 210, 230, 80)]
+    boxes = [(*g, title, sub, i == len(geometry) - 1)  # the last box, the result, gets the accent
+             for i, (g, (title, sub)) in enumerate(zip(geometry, text['boxes']))]
     arrows = [  # x1, y1, x2, y2
         (250, 88, 330, 88), (250, 242, 330, 242), (560, 100, 640, 100), (755, 210, 755, 160),
         (870, 100, 950, 100), (1065, 160, 1065, 210),
     ]
     # Small labels on the server box: what it does with the text.
-    notes = ['divide em frases', 'aplica a pronúncia', 'uma geração por vez', 'vigia a placa']
+    notes = text['notes']
     for suffix, fg, sub, box, stroke, arrow in (('', INK, ASH, '#FFFFFF', LINE, ASH),
                                                ('-dark', PAPER, ASH, '#1A1C20', GRAPHITE, ASH)):
         parts = ['<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" '
@@ -229,7 +247,7 @@ def diagram():
             d, _, _ = text_path(note, inter_r, 15)
             parts.append(f'<circle cx="{358}" cy="{148 + i * 34 - 5}" r="3" fill="{SIGNAL}"/>')
             parts.append(f'<path transform="translate(370 {148 + i * 34})" d="{d}" fill="{fg}"/>')
-        (HERE.parent / 'docs' / f'como-funciona{suffix}.svg').write_text(svg(W, H, '\n  '.join(parts)))
+        (HERE.parent / 'docs' / f'{name}{suffix}.svg').write_text(svg(W, H, '\n  '.join(parts)))
 
 
 if __name__ == '__main__':

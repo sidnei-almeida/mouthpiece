@@ -4,166 +4,179 @@
 
 <p align="center">
   <b>your voice, typed.</b><br>
-  Digite um texto e ouça com a sua própria voz. Tudo roda no seu computador.
+  Type some text and hear it in your own voice. Everything runs on your computer.
 </p>
 
 <p align="center">
-  <img alt="Windows e Linux" src="https://img.shields.io/badge/Windows%20%7C%20Linux-111214?style=flat-square">
-  <img alt="Intel Arc, NVIDIA ou CPU" src="https://img.shields.io/badge/Intel%20Arc%20%7C%20NVIDIA%20%7C%20CPU-111214?style=flat-square">
-  <img alt="Inglês e português" src="https://img.shields.io/badge/EN%20%7C%20PT--BR-111214?style=flat-square">
+  <img alt="Windows and Linux" src="https://img.shields.io/badge/Windows%20%7C%20Linux-111214?style=flat-square">
+  <img alt="Intel Arc, NVIDIA or CPU" src="https://img.shields.io/badge/Intel%20Arc%20%7C%20NVIDIA%20%7C%20CPU-111214?style=flat-square">
+  <img alt="English and Portuguese" src="https://img.shields.io/badge/EN%20%7C%20PT--BR-111214?style=flat-square">
   <img alt="100% local" src="https://img.shields.io/badge/100%25%20local-FF4F2E?style=flat-square">
 </p>
 
+<p align="center"><b>English</b> · <a href="README.pt-BR.md">Português</a></p>
+
 <p align="center">
-  <img src="docs/app-falar.png" alt="Mouthpiece: digite o texto, gere e baixe o WAV" width="820">
+  <img src="docs/app-falar.png" alt="Mouthpiece: type the text, generate, download the WAV" width="820">
 </p>
 
 ---
 
-O **Mouthpiece** clona a sua voz a partir de uma leitura de 1 a 2 minutos e fala qualquer texto com
-ela, em **inglês ou português**. Você ouve a prévia e baixa um WAV pronto para a edição. Feito para
-quem grava narração, vídeo-ensaio, podcast ou tutorial e não quer ficar regravando frase por frase.
+**Mouthpiece** clones your voice from a 1-2 minute reading and speaks any text with it, in **English
+or Portuguese**. You hear a preview and download a WAV that's ready to edit. Made for people who
+record narration, video essays, podcasts or tutorials and are tired of re-recording line by line.
 
-- **A sua voz, não uma voz genérica.** Clonagem a partir de uma gravação feita no próprio app.
-- **Pronto para editar.** WAV mono, 48 kHz, 24 bits, **-16 LUFS**, picos abaixo de -1,5 dBFS.
-- **Privado.** O modelo roda na sua placa de vídeo. Nenhum texto ou áudio sai do computador.
-- **Pelo navegador ou pelo terminal.** Um comando `mouthpiece` para scripts, e uma skill para o
-  Claude Code gerar narração sozinho enquanto edita vídeos.
+- **Your voice, not a stock one.** Cloned from a recording you make inside the app.
+- **Edit-ready.** Mono WAV, 48 kHz, 24-bit, **-16 LUFS**, peaks under -1.5 dBFS.
+- **Private.** The model runs on your own GPU. No text or audio leaves your computer.
+- **In the browser or in the terminal.** A `mouthpiece` command for scripts, and a skill so Claude
+  Code can write and voice narration on its own while you edit videos.
 
-## Instalar
+> The app's interface is in Portuguese for now; it speaks both English and Portuguese.
+
+## Install
 
 ### Windows
 
-1. Baixe **`Mouthpiece-Setup.exe`** na página de [Releases](../../releases).
-2. Rode o instalador. Ele não pede administrador e:
-   - baixa o Python, o PyTorch certo para a sua placa e o modelo de voz (**alguns GB**), mostrando o
-     progresso numa janela;
-   - cria atalhos no Menu Iniciar (e na Área de Trabalho, se quiser) e o comando `mouthpiece`.
-3. Abra o **Mouthpiece** pelo Menu Iniciar.
+1. Download **`Mouthpiece-Setup.exe`** from [Releases](../../releases).
+2. Run it. It doesn't need administrator rights, and it:
+   - downloads Python, the right PyTorch for your GPU and the voice model (**a few GB**), showing the
+     progress in a window;
+   - adds Start menu (and, if you want, desktop) shortcuts and the `mouthpiece` command.
+3. Open **Mouthpiece** from the Start menu.
 
-> Windows 10/11 64 bits, ~10 GB livres. Recomendado: placa **Intel Arc** ou **NVIDIA** com 8 GB ou
-> mais. Sem placa compatível ele roda na CPU, só que bem mais devagar.
+> Windows 10/11 64-bit, ~10 GB free. Recommended: an **Intel Arc** or **NVIDIA** GPU with 8 GB or
+> more. Without a supported GPU it runs on the CPU, just much slower.
 
 ### Linux
 
+Download **`mouthpiece-<version>-linux.tar.gz`** from [Releases](../../releases), then:
+
 ```bash
-git clone https://github.com/sidnei-almeida/mouthpiece && cd mouthpiece
-./setup.sh                                    # detecta a placa e baixa tudo (alguns GB)
-ln -sf "$PWD/cli.py" ~/.local/bin/mouthpiece  # o comando
-./start.sh                                    # abre o app
+tar xzf mouthpiece-*-linux.tar.gz && cd mouthpiece-*-linux
+./install.sh          # detects your GPU and downloads everything (a few GB)
 ```
 
-Precisa do [uv](https://docs.astral.sh/uv/). Para Intel Arc: `intel-compute-runtime` e
-`level-zero-loader`. Para NVIDIA: o driver proprietário.
+It installs to `~/.local/lib/mouthpiece`, adds the `mouthpiece` command and an app-menu entry, and
+fetches [uv](https://docs.astral.sh/uv/) if you don't have it. For Intel Arc you need
+`intel-compute-runtime` and `level-zero-loader`; for NVIDIA, the proprietary driver.
+`./uninstall.sh` removes it (your voices stay).
 
-## Como usar
+From source instead: `git clone` this repository, then `./setup.sh` and `./start.sh`.
 
-### 1. Crie a sua voz
+## How to use it
 
-<img src="docs/app-vozes.png" alt="Aba Vozes: roteiro de leitura com o tom de cada trecho" width="820">
+### 1. Create your voice
 
-Na aba **Vozes**, clique em **Gravar** e leia em voz alta o roteiro da tela. São 1 a 2 minutos, num
-lugar silencioso. O roteiro tem trechos com tons diferentes (normal, narração, perguntas, empolgado,
-baixinho), números, nomes e **todos os sons do idioma**, para o clone ter o máximo de dados da sua
-voz. Também dá para enviar um arquivo pronto (WAV, FLAC, OGG ou MP3).
+<img src="docs/app-vozes.png" alt="Voices tab: a reading script with a tone cue for each part" width="820">
 
-> O clone copia o timbre **e o jeito** da gravação. Grave no tom em que quer ouvir a voz depois.
+In the **Vozes** (Voices) tab, click **Gravar** (Record) and read the on-screen script out loud. It
+takes 1-2 minutes, somewhere quiet. The script has parts in different tones (normal, narration,
+questions, excited, quiet), numbers, names and **every sound of the language**, so the clone gets as
+much of your voice as possible. You can also upload a recording (WAV, FLAC, OGG or MP3).
 
-### 2. Gere
+> The clone copies your timbre **and your delivery**. Record in the tone you want to hear later.
 
-Na aba **Falar**, escolha **EN** ou **PT**, digite e clique **Gerar** (ou `Ctrl+Enter`). A prévia toca
-sozinha. **Baixar WAV** salva o arquivo com um nome tirado do texto.
+### 2. Generate
 
-- Uma linha em branco vira uma pausa maior.
-- Textos longos são divididos em frases sozinhos (até 6.000 caracteres, uns 15 minutos de fala).
-- **Pronúncia:** regras "escrito → falado" para nomes que saem errados, como
+In the **Falar** (Speak) tab, pick **EN** or **PT**, type and click **Gerar** (Generate), or press
+`Ctrl+Enter`. The preview plays by itself. **Baixar WAV** downloads it, named after the text.
+
+- A blank line becomes a longer pause.
+- Long text is split into sentences for you (up to 6,000 characters, about 15 minutes of speech).
+- **Pronunciation:** "written → spoken" rules for names it gets wrong, like
   `Alien: Isolation` → `Alien Isolation`.
 
-### 3. Saia
+### 3. Quit
 
-O botão **Sair** fecha o Mouthpiece e libera a memória da placa de vídeo. Sem uso, ele fecha sozinho
-depois de 20 minutos.
+**Sair** (Quit) closes Mouthpiece and frees the GPU memory. Left idle, it closes itself after
+20 minutes.
 
 ## Terminal
 
 ```bash
-mouthpiece say "Twelve years late." -o narracao.wav
-mouthpiece say -f roteiro.txt -o narracao.wav --lang pt
-echo "texto" | mouthpiece say - -o narracao.wav
-mouthpiece say "..." -o cena1.wav --json     # {"path", "duration", "frames_30", "frames_60", ...}
+mouthpiece say "Twelve years late." -o narration.wav
+mouthpiece say -f script.txt -o narration.wav --lang pt
+echo "text" | mouthpiece say - -o narration.wav
+mouthpiece say "..." -o scene1.wav --json     # {"path", "duration", "frames_30", "frames_60", ...}
+mouthpiece voice add recording.wav --name "my voice" --lang en
 mouthpiece voices | open | status | stop
 mouthpiece pronuncia add "Alien: Isolation" "Alien Isolation"
 ```
 
-Se o app não estiver aberto, o comando abre o servidor sozinho e espera o modelo carregar. O `--json`
-devolve a duração em frames, para encaixar a fala direto numa timeline.
+If the app isn't open, the command starts the server and waits for the model. `--json` returns the
+duration in frames, so the line drops straight onto a timeline.
 
 ## Claude Code
 
-A skill em [`claude-skill/narration`](claude-skill/narration/SKILL.md) ensina o Claude a escrever a
-fala, gerar com `mouthpiece` e encaixá-la no [Remotion](https://www.remotion.dev/) pela duração em
-frames. Para instalar:
+The skill in [`claude-skill/narration`](claude-skill/narration/SKILL.md) teaches Claude to write the
+line, generate it with `mouthpiece` and fit it into a [Remotion](https://www.remotion.dev/) timeline
+by its length in frames. To install it:
 
 ```bash
 ln -sfn "$PWD/claude-skill/narration" ~/.claude/skills/narration
 ```
 
-Depois é só pedir, por exemplo: *"gera uma narração para essa cena explicando o motion tracker"*.
+Then just ask, for example: *"write and voice a narration for this scene about the motion tracker"*.
 
-## Como funciona
+## How it works
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/como-funciona-dark.svg">
-  <img src="docs/como-funciona.svg" alt="Navegador ou terminal mandam o texto ao servidor local, que usa o Qwen3-TTS na placa de vídeo com a sua voz de referência; o áudio passa pelo acabamento e vira um WAV pronto" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/how-it-works-dark.svg">
+  <img src="docs/how-it-works.svg" alt="The browser or the terminal sends text to the local server, which runs Qwen3-TTS on the GPU with your reference voice; the audio is finished and becomes a WAV ready to edit" width="100%">
 </picture>
 
-- **Modelo:** [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 1.7B (clonagem de voz), fixado numa
-  revisão exata para a voz não mudar sem aviso.
-- **Placa:** Intel Arc via PyTorch XPU, NVIDIA via CUDA, ou CPU. Detectada na instalação e ao abrir.
-- **Acabamento:** volume medido no padrão EBU R128 e limitador de picos, em Python puro (sem ffmpeg).
-- **Uma geração por vez**, com um vigia que detecta a placa travada em vez de esperar para sempre.
+- **Model:** [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 1.7B (voice cloning), pinned to an exact
+  revision so your voice never changes without notice.
+- **GPU:** Intel Arc through PyTorch XPU, NVIDIA through CUDA, or the CPU. Detected at install time
+  and at startup.
+- **Finishing:** loudness measured to EBU R128 and a peak limiter, in pure Python (no ffmpeg).
+- **One generation at a time**, with a watchdog that notices a stuck GPU instead of waiting forever.
 
-## Onde ficam os seus arquivos
+## Where your files live
 
 | | Windows | Linux |
 |---|---|---|
-| Vozes, áudios gerados, regras | `%APPDATA%\Mouthpiece` | `~/.local/share/mouthpiece` |
-| Modelo (~4 GB) | `%USERPROFILE%\.cache\huggingface` | `~/.cache/huggingface` |
+| Voices, generated audio, rules | `%APPDATA%\Mouthpiece` | `~/.local/share/mouthpiece` |
+| Model (~4 GB) | `%USERPROFILE%\.cache\huggingface` | `~/.cache/huggingface` |
 
-Desinstalar remove o app, mas **mantém as suas vozes e o modelo**.
+Uninstalling removes the app but **keeps your voices and the model**.
 
-## Privacidade e uso responsável
+## Privacy and responsible use
 
-- O servidor só aceita conexões do próprio computador e recusa pedidos vindos de outros sites:
-  nenhuma página aberta no navegador consegue gerar áudio com a sua voz.
-- **Clone só a sua voz, ou a de quem autorizou.** Imitar a voz de outra pessoa sem permissão pode ser
-  ilegal e, no mínimo, é desonesto.
+- The server only accepts connections from your own computer and rejects requests coming from other
+  websites: no page open in your browser can make it speak in your voice.
+- **Only clone your own voice, or one you have permission to use.** Imitating someone else's voice
+  without consent can be illegal, and is dishonest at best.
 
-## Problemas comuns
+## Troubleshooting
 
-| Sintoma | O que fazer |
+| Symptom | What to do |
 |---|---|
-| "placa travada" | Um jogo aberto disputa a placa de vídeo. Feche o jogo e reabra o Mouthpiece. |
-| Lento demais | Sem placa compatível, roda na CPU. Uma Intel Arc ou NVIDIA deixa uns 10x mais rápido. |
-| Um nome sai errado | Adicione uma regra em **Pronúncia**, escrevendo como se fala. |
-| A voz não parece você | Grave de novo lendo o roteiro inteiro, num lugar silencioso e no tom que quer. |
-| A instalação falhou (Windows) | Veja `setup.log` na pasta do app e rode `setup.ps1` de novo. |
+| "placa travada" (GPU stuck) | A game is competing for the GPU. Close it and reopen Mouthpiece. |
+| Too slow | Without a supported GPU it runs on the CPU. An Intel Arc or NVIDIA GPU is about 10x faster. |
+| A name comes out wrong | Add a **Pronúncia** (pronunciation) rule, spelled the way it's said. |
+| It doesn't sound like you | Record again: the whole script, somewhere quiet, in the tone you want. |
+| Install failed (Windows) | Check `setup.log` in the app folder and run `setup.ps1` again. |
 
-## Desenvolvimento
+## Development
 
-| Pasta | O quê |
+| Path | What |
 |---|---|
-| `server.py`, `audio.py`, `cli.py` | Servidor, acabamento de áudio e o comando `mouthpiece` |
-| `static/` | O app (HTML, CSS e JS sem dependências) e o roteiro de leitura (`scripts.json`) |
-| `brand/` | Kit de marca ([`BRAND.md`](brand/BRAND.md)); `python3 brand/build.py` gera logos e ícones |
-| `install/windows/` | Instalador (Inno Setup) e scripts de instalação |
-| `claude-skill/` | A skill do Claude Code |
+| `server.py`, `audio.py`, `cli.py` | Server, audio finishing and the `mouthpiece` command |
+| `static/` | The app (dependency-free HTML, CSS and JS) and the reading scripts (`scripts.json`) |
+| `brand/` | Brand kit ([`BRAND.md`](brand/BRAND.md)); `python3 brand/build.py` builds logos and icons |
+| `install/` | Windows installer (Inno Setup) and Linux install scripts |
+| `tests/` | The post-install smoke test the release workflow runs on Windows and Linux |
+| `claude-skill/` | The Claude Code skill |
 
-O `install/build-windows.sh` gera o instalador `.exe` no Linux, via Wine.
+Releases are built by GitHub Actions: pushing a `v*` tag builds the Windows installer and the Linux
+package, installs each one on a clean machine, creates a voice and speaks a line, and only then
+publishes the release.
 
-## Créditos
+## Credits
 
-- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS), da equipe Qwen (Alibaba), licença Apache 2.0.
-- Fontes [Space Grotesk](https://github.com/floriankarsten/space-grotesk),
-  [Inter](https://rsms.me/inter/) e [JetBrains Mono](https://www.jetbrains.com/lp/mono/), licença OFL.
-- Feito para o canal **Dude, We Late**: *videos about games. eventually.*
+- [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) by the Qwen team (Alibaba), Apache 2.0.
+- Fonts: [Space Grotesk](https://github.com/floriankarsten/space-grotesk),
+  [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/), OFL.
+- Made for the **Dude, We Late** channel: *videos about games. eventually.*

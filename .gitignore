@@ -8,6 +8,7 @@ dist/
 !.github/
 *.md
 !README.md
+!README.*.md
 !brand/BRAND.md
 !voices/README.md
 !claude-skill/**/SKILL.md
