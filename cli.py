@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""dwl-voice: generate speech in your cloned voice from the terminal (or from Claude Code).
+"""mouthpiece: speech in your own cloned voice, from the terminal (or from Claude Code).
 
-Talks to the voice studio server (server.py) and starts it in the background if it isn't running,
-so the model loads once and stays on the GPU between calls. Standard library only.
+Talks to the Mouthpiece server (server.py) and starts it in the background if it isn't running, so
+the model loads once and stays on the GPU between calls. Standard library only; Windows and Linux.
 
-    dwl-voice say "Text to speak." -o narration.wav [--lang en|pt] [--voice minha-voz-en.wav] [--json]
-    dwl-voice say -f script.txt -o narration.wav        (or text on stdin: echo "..." | dwl-voice say -)
-    dwl-voice status | stop
-    dwl-voice pronuncia                                  (list rules)
-    dwl-voice pronuncia add "Alien: Isolation" "Alien Isolation"
+    mouthpiece say "Text to speak." -o narration.wav [--lang en|pt] [--voice name-en.wav] [--json]
+    mouthpiece say -f script.txt -o narration.wav        (or text on stdin: echo "..." | mouthpiece say -)
+    mouthpiece open | status | stop
+    mouthpiece voices
+    mouthpiece pronuncia                                  (list rules)
+    mouthpiece pronuncia add "Alien: Isolation" "Alien Isolation"
 
 --json prints {"path", "duration", "frames_30", "frames_60", "generated_in"} for scripts and agents.
 Progress goes to stderr, results to stdout.
@@ -25,17 +26,26 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from pathlib import Path
 
 ROOT = Path(os.path.realpath(__file__)).parent
-URL = os.environ.get('DWL_VOICE_URL', 'http://127.0.0.1:7860')
-STATE = Path.home() / '.cache' / 'dwl-voice'
+URL = os.environ.get('MOUTHPIECE_URL', 'http://127.0.0.1:7860')
+WINDOWS = os.name == 'nt'
+STATE = (Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'Mouthpiece' if WINDOWS
+         else Path.home() / '.cache' / 'mouthpiece')
 PIDFILE, LOG = STATE / 'server.pid', STATE / 'server.log'
+VENV_PY = ROOT / '.venv' / ('Scripts/pythonw.exe' if WINDOWS else 'bin/python')
+
+
+def err(msg: str):
+    print(msg, file=sys.stderr, flush=True)
 
 
 def api(method: str, path: str, body=None, timeout=10):
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(URL + path, data=data, method=method, headers={'Content-Type': 'application/json'})
+    req = urllib.request.Request(URL + path, data=data, method=method,
+                                 headers={'Content-Type': 'application/json', 'X-Mouthpiece': '1'})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read())
@@ -49,19 +59,13 @@ def api(method: str, path: str, body=None, timeout=10):
         sys.exit(f'error: {detail or e}')
 
 
-def err(msg: str):
-    print(msg, file=sys.stderr, flush=True)
-
-
 def server_status():
     """The server's status, None if nothing listens, or {'status': 'foreign'} if something else does."""
     try:
         with urllib.request.urlopen(URL + '/api/status', timeout=3) as r:
             s = json.loads(r.read())
         return s if isinstance(s, dict) and 'status' in s else {'status': 'foreign'}
-    except urllib.error.HTTPError:
-        return {'status': 'foreign'}
-    except ValueError:
+    except (urllib.error.HTTPError, ValueError):
         return {'status': 'foreign'}
     except (urllib.error.URLError, ConnectionError, TimeoutError):
         return None
@@ -69,41 +73,50 @@ def server_status():
 
 def log_tail(n: int = 15) -> str:
     try:
-        return '\n'.join(LOG.read_text().splitlines()[-n:])
+        return '\n'.join(LOG.read_text(errors='replace').splitlines()[-n:])
     except FileNotFoundError:
         return ''
+
+
+def start_server():
+    STATE.mkdir(parents=True, exist_ok=True)
+    port = str(urllib.parse.urlsplit(URL).port or 7860)
+    cmd = [str(VENV_PY), '-m', 'uvicorn', 'server:app', '--host', '127.0.0.1', '--port', port]
+    kwargs = {'cwd': ROOT, 'stdout': open(LOG, 'a'), 'stderr': subprocess.STDOUT}
+    if WINDOWS:  # its own process group, no console window, survives this command exiting
+        kwargs['creationflags'] = (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+                                   | subprocess.CREATE_NO_WINDOW)
+    else:
+        kwargs['start_new_session'] = True
+    proc = subprocess.Popen(cmd, **kwargs)
+    PIDFILE.write_text(str(proc.pid))
+    return proc
 
 
 def ensure_server(wait: bool = True) -> dict:
     s, proc = server_status(), None
     if s and s['status'] == 'foreign':
-        sys.exit(f'something else is using {URL}; free the port or set DWL_VOICE_URL')
+        sys.exit(f'something else is using {URL}; free the port or set MOUTHPIECE_URL')
     if s is None:
-        STATE.mkdir(parents=True, exist_ok=True)
-        err('voice server not running; starting it (the model takes ~10-70 s to load)')
-        port = str(urllib.parse.urlsplit(URL).port or 7860)
-        proc = subprocess.Popen(
-            [str(ROOT / '.venv' / 'bin' / 'uvicorn'), 'server:app', '--host', '127.0.0.1', '--port', port],
-            cwd=ROOT, stdout=open(LOG, 'a'), stderr=subprocess.STDOUT, start_new_session=True,
-        )
-        PIDFILE.write_text(str(proc.pid))
+        err('Mouthpiece is not running; starting it (the model takes ~10-70 s to load)')
+        proc = start_server()
     t0 = time.time()
     while True:
         s = server_status()
         if proc and proc.poll() is not None:
-            sys.exit(f'the voice server exited during startup:\n{log_tail()}')
+            sys.exit(f'Mouthpiece exited during startup:\n{log_tail()}')
         if s and s['status'] in ('error', 'stuck'):
-            sys.exit(f'voice server: {s["error"]}')
+            sys.exit(f'Mouthpiece: {s["error"]}')
         if s and (s['status'] == 'ready' or (not wait and s['status'] == 'loading')):
             return s
-        if time.time() - t0 > 300:
-            sys.exit(f'server not ready after 5 min; see {LOG}')
+        if time.time() - t0 > 600:
+            sys.exit(f'Mouthpiece not ready after 10 min; see {LOG}')
         time.sleep(1.5)
 
 
 def cmd_say(a):
     if a.file:
-        text = Path(a.file).read_text()
+        text = Path(a.file).read_text(encoding='utf-8')
     elif a.text == '-' or a.text is None:
         text = sys.stdin.read()
     else:
@@ -115,7 +128,7 @@ def cmd_say(a):
     jid, t0, last = job['id'], time.time(), None
     while True:
         if server_status() is None:
-            sys.exit('the voice server stopped while generating')
+            sys.exit('Mouthpiece stopped while generating')
         job = api('GET', f'/api/jobs/{jid}')
         if job['state'] in ('done', 'error'):
             break
@@ -144,13 +157,25 @@ def cmd_say(a):
         err(f'{d} s of audio, generated in {job["seconds"]} s')
 
 
+def cmd_open(_):
+    ensure_server(wait=False)
+    webbrowser.open(URL)
+
+
 def cmd_status(_):
     s = server_status()
     print(json.dumps(s, ensure_ascii=False) if s else 'not running')
 
 
 def ours(pid: int) -> bool:
-    """Whether pid is still our uvicorn: after a crash the number can be reused by another program."""
+    """Whether pid is still our server: after a crash the number can be reused by another program."""
+    if WINDOWS:
+        out = subprocess.run(
+            ['powershell', '-NoProfile', '-Command',
+             f'(Get-CimInstance Win32_Process -Filter "ProcessId={pid}").CommandLine'],
+            capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW,
+        ).stdout
+        return 'uvicorn' in out and 'server:app' in out
     try:
         cmd = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
     except FileNotFoundError:
@@ -159,21 +184,42 @@ def ours(pid: int) -> bool:
 
 
 def cmd_stop(_):
+    s = server_status()
+    if s and s['status'] != 'foreign':
+        try:  # the clean way: works whoever started it (launcher, start.sh or this CLI)
+            req = urllib.request.Request(URL + '/api/shutdown', data=b'', method='POST', headers={'X-Mouthpiece': '1'})
+            urllib.request.urlopen(req, timeout=5).read()
+            print('stopped')
+            PIDFILE.unlink(missing_ok=True)
+            return
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            pass  # stuck hard: fall back to killing the process
     if not PIDFILE.exists():
-        print('no server started by dwl-voice (one opened with start.sh stops with Ctrl+C)')
+        print('not running')
         return
     pid = int(PIDFILE.read_text())
     if ours(pid):
-        os.killpg(pid, signal.SIGTERM)
+        if WINDOWS:
+            subprocess.run(['taskkill', '/PID', str(pid), '/T', '/F'], capture_output=True)
+        else:
+            os.killpg(pid, signal.SIGTERM)
         print('stopped')
     else:
         print('not running')
     PIDFILE.unlink()
 
 
+def cmd_voices(_):
+    s = ensure_server(wait=False)
+    for v in s['voices']:
+        print(v)
+    if not s['voices']:
+        print('no voices yet: create one in the app (mouthpiece open, then "Vozes")')
+
+
 def cmd_pronuncia(a):
     if a.action in ('add', 'rm') and not a.de:
-        sys.exit(f'usage: dwl-voice pronuncia {a.action} "written"' + (' "spoken"' if a.action == 'add' else ''))
+        sys.exit(f'usage: mouthpiece pronuncia {a.action} "written"' + (' "spoken"' if a.action == 'add' else ''))
     ensure_server(wait=False)  # the rules API answers before the model is ready
     rules = api('GET', '/api/pronuncia')
     if a.action == 'add':
@@ -185,22 +231,32 @@ def cmd_pronuncia(a):
         print(f'{r["de"]}  ->  {r["para"]}')
 
 
-p = argparse.ArgumentParser(prog='dwl-voice', description='Speech in your cloned voice (Qwen3-TTS on the Arc).')
-sub = p.add_subparsers(dest='cmd', required=True)
-s = sub.add_parser('say', help='generate speech')
-s.add_argument('text', nargs='?', help='text, or - for stdin')
-s.add_argument('-f', '--file', help='read the text from a file')
-s.add_argument('-o', '--output', help='output WAV (default: named after the text, in the current folder)')
-s.add_argument('--lang', choices=['en', 'pt'], default='en')
-s.add_argument('--voice', help='reference voice in voices/ (default: *-<lang>.wav)')
-s.add_argument('--json', action='store_true', help='machine-readable result')
-s.set_defaults(fn=cmd_say)
-sub.add_parser('status').set_defaults(fn=cmd_status)
-sub.add_parser('stop').set_defaults(fn=cmd_stop)
-pr = sub.add_parser('pronuncia', help='pronunciation rules')
-pr.add_argument('action', nargs='?', choices=['list', 'add', 'rm'], default='list')
-pr.add_argument('de', nargs='?')
-pr.add_argument('para', nargs='?', default='')
-pr.set_defaults(fn=cmd_pronuncia)
-a = p.parse_args()
-a.fn(a)
+def main():
+    if hasattr(sys.stdout, 'reconfigure'):  # accents on Windows consoles
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    p = argparse.ArgumentParser(prog='mouthpiece', description='Speech in your own cloned voice.')
+    sub = p.add_subparsers(dest='cmd', required=True)
+    s = sub.add_parser('say', help='generate speech')
+    s.add_argument('text', nargs='?', help='text, or - for stdin')
+    s.add_argument('-f', '--file', help='read the text from a file')
+    s.add_argument('-o', '--output', help='output WAV (default: named after the text, in the current folder)')
+    s.add_argument('--lang', choices=['en', 'pt'], default='en')
+    s.add_argument('--voice', help='voice to use (see: mouthpiece voices; default: one ending in -<lang>.wav)')
+    s.add_argument('--json', action='store_true', help='machine-readable result')
+    s.set_defaults(fn=cmd_say)
+    sub.add_parser('open', help='open the app in the browser').set_defaults(fn=cmd_open)
+    sub.add_parser('status').set_defaults(fn=cmd_status)
+    sub.add_parser('stop', help='shut the server down and free the GPU').set_defaults(fn=cmd_stop)
+    sub.add_parser('voices', help='list the voices').set_defaults(fn=cmd_voices)
+    pr = sub.add_parser('pronuncia', help='pronunciation rules')
+    pr.add_argument('action', nargs='?', choices=['list', 'add', 'rm'], default='list')
+    pr.add_argument('de', nargs='?')
+    pr.add_argument('para', nargs='?', default='')
+    pr.set_defaults(fn=cmd_pronuncia)
+    a = p.parse_args()
+    a.fn(a)
+
+
+if __name__ == '__main__':
+    main()

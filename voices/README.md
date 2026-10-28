@@ -6,4 +6,5 @@ idioma padrão: `*-en.wav` para inglês, `*-pt.wav` para português.
 O clone copia o **timbre** e também o **jeito** da gravação. Para um clone mais calmo ou mais
 "narrador", grave a referência nesse tom.
 
-Os arquivos `.wav` desta pasta ficam fora do git, porque são a sua voz.
+Os arquivos `.wav` desta pasta ficam fora do git, porque são a sua voz. No app, crie e apague vozes
+na aba **Vozes**.

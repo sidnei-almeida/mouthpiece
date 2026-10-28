@@ -1,16 +1,16 @@
-"""Voice studio: type text, hear it in your cloned voice, export a WAV.
+"""Mouthpiece: type text, hear it in your own cloned voice, export a WAV.
 
-Qwen3-TTS (Base model, voice clone) stays loaded on the Intel Arc GPU through PyTorch XPU. Each
-request is a job: the text gets the pronunciation fixes, is split into short chunks, generated one
-chunk at a time on the GPU (one job at a time), joined with short pauses and normalized to
--16 LUFS / 48 kHz / 24-bit, ready to drop into an edit.
+Qwen3-TTS (Base model, voice clone) stays loaded on the GPU: Intel Arc (XPU), NVIDIA (CUDA) or, as a
+slow fallback, the CPU. Each request is a job: the text gets the pronunciation fixes, is split into
+short chunks, generated one chunk at a time (one job at a time), joined with short pauses and
+finished to -16 LUFS / 48 kHz / 24-bit, ready to drop into an edit.
 
-    ./start.sh          (or: .venv/bin/uvicorn server:app --port 7860)
+    python launcher.py   (or: uvicorn server:app --port 7860)
 """
+import io
 import json
 import os
 import re
-import subprocess
 import tempfile
 import threading
 import time
@@ -22,49 +22,76 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from huggingface_hub import snapshot_download
 from pydantic import BaseModel, Field
 from qwen_tts import Qwen3TTSModel
 
+import audio
+from server_model import MODEL_ID, MODEL_REVISION
+
 ROOT = Path(__file__).parent
-VOICES = ROOT / 'voices'
-OUTPUT = ROOT / 'output'
-PRONUNCIATION = ROOT / 'pronuncia.json'
-# Pinned: a newer upload of the weights or processor can't change or break the voice unannounced.
-MODEL_ID = 'Qwen/Qwen3-TTS-12Hz-1.7B-Base'
-MODEL_REVISION = 'fd4b254389122332181a7c3db7f27e918eec64e3'
-DEVICE = 'xpu' if torch.xpu.is_available() else 'cpu'
+
+
+def data_dir() -> Path:
+    """Where the user's voices, generations and rules live. Outside the install folder, so updating
+    or uninstalling the app never deletes them. MOUTHPIECE_DATA overrides."""
+    if os.environ.get('MOUTHPIECE_DATA'):
+        return Path(os.environ['MOUTHPIECE_DATA'])
+    if os.name == 'nt':
+        return Path(os.environ.get('APPDATA', Path.home())) / 'Mouthpiece'
+    if (ROOT / '.git').exists():  # a development checkout keeps its data next to the code
+        return ROOT
+    return Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'mouthpiece'
+
+
+DATA = data_dir()
+VOICES, OUTPUT, PRONUNCIATION = DATA / 'voices', DATA / 'output', DATA / 'pronuncia.json'
+for d in (VOICES, OUTPUT):
+    d.mkdir(parents=True, exist_ok=True)
+if not PRONUNCIATION.exists() and (ROOT / 'pronuncia.json').exists():
+    PRONUNCIATION.write_text((ROOT / 'pronuncia.json').read_text())
+
+if torch.xpu.is_available():
+    DEVICE, DEVICE_NAME = 'xpu', torch.xpu.get_device_name(0)
+elif torch.cuda.is_available():
+    DEVICE, DEVICE_NAME = 'cuda', torch.cuda.get_device_name(0)
+else:
+    DEVICE, DEVICE_NAME = 'cpu', 'CPU'
+DTYPE = torch.float32 if DEVICE == 'cpu' else torch.bfloat16
 LANGUAGES = {'en': 'English', 'pt': 'Portuguese'}
 MAX_TEXT = 6000  # characters per request: about 15 minutes of speech
 # Longer chunks drift (repeats, invented words); the model is steadiest a sentence or two at a time.
 MAX_CHUNK = 260
 PAUSE_CHUNK, PAUSE_PARAGRAPH = 0.25, 0.6
+MAX_UPLOAD = 60 * 1024 * 1024
+# Shut down after this long with no page open and nothing to do, to give the GPU memory back.
+IDLE_MINUTES = float(os.environ.get('MOUTHPIECE_IDLE_MIN', '20'))
 
 
 def chunk_deadline(chunk: str) -> float:
-    """A healthy chunk takes ~3 s per second of speech. Far past that, the GPU is stuck (a game holding
-    the Arc makes the driver time the job out, and the call never returns)."""
-    return 90 + 0.6 * len(chunk)
+    """A healthy chunk takes ~3 s per second of speech on a GPU (far more on the CPU). Far past that,
+    the GPU is stuck: a game holding it can make the driver time the job out, and the call never
+    returns."""
+    return (90 + 0.6 * len(chunk)) * (10 if DEVICE == 'cpu' else 1)
 
 
-OUTPUT.mkdir(exist_ok=True)
-state = {'status': 'loading', 'error': None, 'model': None}
+state = {'status': 'loading', 'error': None, 'model': None, 'activity': time.time()}
 prompts: dict[str, object] = {}
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
 gpu = threading.Lock()
-STUCK = 'A GPU travou (um jogo aberto costuma causar isso). Feche o jogo e reinicie o Voice Studio.'
+STUCK = 'A placa de vídeo travou (um jogo aberto costuma causar isso). Feche o jogo e reinicie o Mouthpiece.'
 
 
 def load_model():
     try:
         path = snapshot_download(MODEL_ID, revision=MODEL_REVISION)
         state['model'] = Qwen3TTSModel.from_pretrained(
-            path, device_map=DEVICE, dtype=torch.bfloat16, attn_implementation='sdpa'
+            path, device_map=DEVICE, dtype=DTYPE, attn_implementation='sdpa'
         )
         state['status'] = 'ready'
     except Exception as e:  # shown in the UI
@@ -89,20 +116,28 @@ def check_jobs(now: float):
             del jobs[jid]
 
 
+def idle(now: float) -> bool:
+    busy = any(j['state'] in ('queued', 'running') for j in jobs.values())
+    return IDLE_MINUTES > 0 and not busy and now - state['activity'] > IDLE_MINUTES * 60
+
+
 def watchdog():
     while True:
         time.sleep(5)
-        check_jobs(time.time())
+        now = time.time()
+        check_jobs(now)
+        if idle(now):
+            os._exit(0)
 
 
 threading.Thread(target=watchdog, daemon=True).start()
 
 
-def write_atomic(path: Path, text: str):
+def write_atomic(path: Path, data: str | bytes):
     """Write then rename, so a reader never sees a half-written file."""
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f'.{path.name}.')
-    with os.fdopen(fd, 'w') as f:
-        f.write(text)
+    with os.fdopen(fd, 'wb' if isinstance(data, bytes) else 'w') as f:
+        f.write(data)
     os.replace(tmp, path)
 
 
@@ -180,31 +215,6 @@ def slug(text: str, words: int = 6) -> str:
     return '-'.join(re.findall(r'[a-z0-9]+', t)[:words]) or 'fala'
 
 
-def loudness(path: Path) -> float:
-    log = subprocess.run(
-        ['ffmpeg', '-hide_banner', '-nostats', '-i', str(path), '-af', 'ebur128', '-f', 'null', '-'],
-        capture_output=True, text=True,
-    ).stderr
-    m = re.search(r'I:\s+(-?[\d.]+)', log[log.rfind('Integrated loudness'):])
-    if not m:
-        raise RuntimeError('não consegui medir o volume do áudio gerado')
-    return float(m.group(1))
-
-
-def finish(raw: Path, out: Path):
-    """-16 LUFS by one fixed gain, then a limiter under -1.5 dBFS; 48 kHz 24-bit mono."""
-    level = loudness(raw)
-    if level < -50:  # ebur128 reports -70 for silence; a gain to -16 would only amplify hiss
-        raise RuntimeError('o modelo devolveu silêncio; tente reescrever o texto')
-    gain = min(-16 - level, 30)
-    subprocess.run(
-        ['ffmpeg', '-v', 'error', '-y', '-i', str(raw), '-af',
-         f'volume={gain:.2f}dB,aresample=48000,alimiter=limit=0.84:level=disabled:asc=1',
-         '-ar', '48000', '-ac', '1', '-c:a', 'pcm_s24le', str(out)],
-        check=True,
-    )
-
-
 def run(job_id: str):
     job = jobs[job_id]
     try:
@@ -225,14 +235,12 @@ def run(job_id: str):
                 parts += [wavs[0].astype(np.float32), np.zeros(int(sr * pause), np.float32)]
                 job['done'] = i + 1
             job['chunk_deadline'] = None
-            audio = np.concatenate(parts[:-1])
-        raw = OUTPUT / f'{job_id}-raw.wav'
-        sf.write(raw, audio, sr)
-        try:
-            finish(raw, OUTPUT / f'{job_id}.wav')
-        finally:
-            raw.unlink(missing_ok=True)
-        job.update(seconds=round(time.time() - t0, 1), duration=round(len(audio) / sr, 1))
+            speech = np.concatenate(parts[:-1])
+        out = audio.finish(speech, sr)
+        buf = io.BytesIO()
+        sf.write(buf, out, audio.OUT_SR, subtype='PCM_24', format='WAV')
+        write_atomic(OUTPUT / f'{job_id}.wav', buf.getvalue())
+        job.update(seconds=round(time.time() - t0, 1), duration=round(len(out) / audio.OUT_SR, 1))
         meta = {k: job[k] for k in ('id', 'text', 'lang', 'voice', 'created', 'filename', 'duration', 'seconds')}
         write_atomic(OUTPUT / f'{job_id}.json', json.dumps(meta, ensure_ascii=False))
         job['state'] = 'done'
@@ -242,11 +250,22 @@ def run(job_id: str):
         job['t'] = time.time()
 
 
-app = FastAPI()
+app = FastAPI(title='Mouthpiece')
 # Only the names this machine uses for itself. Any other Host means a page reached the server
 # through DNS rebinding (an attacker's domain pointed at 127.0.0.1) and could otherwise make it
-# speak arbitrary text in the owner's voice and read the history.
+# speak arbitrary text in the user's voice and read the history.
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost'])
+
+
+@app.middleware('http')
+async def guard(request: Request, call_next):
+    # Every change needs this header. A website can send a "simple" cross-origin POST (text/plain body,
+    # no preflight) that would otherwise replace a voice or shut the app down; a custom header forces
+    # the browser's preflight, which this server never approves (no CORS).
+    if request.method not in ('GET', 'HEAD') and request.headers.get('x-mouthpiece') != '1':
+        return JSONResponse({'detail': 'requisição recusada'}, status_code=403)
+    state['activity'] = time.time()  # an open page polls every few seconds and keeps this fresh
+    return await call_next(request)
 
 
 class GenerateRequest(BaseModel):
@@ -262,9 +281,8 @@ class Rule(BaseModel):
 
 @app.get('/api/status')
 def status():
-    return {'status': state['status'], 'error': state['error'], 'device': DEVICE,
-            'gpu': torch.xpu.get_device_name(0) if DEVICE == 'xpu' else 'CPU', 'voices': voices(),
-            'max_text': MAX_TEXT}
+    return {'status': state['status'], 'error': state['error'], 'device': DEVICE, 'gpu': DEVICE_NAME,
+            'voices': voices(), 'max_text': MAX_TEXT, 'data': str(DATA)}
 
 
 @app.post('/api/generate')
@@ -280,7 +298,7 @@ def generate(req: GenerateRequest):
         raise HTTPException(400, 'texto vazio')
     available = voices()
     if not available:
-        raise HTTPException(400, 'nenhuma voz em voices/ (veja voices/README.md)')
+        raise HTTPException(400, 'nenhuma voz ainda: crie a sua em "Vozes"')
     voice = req.voice or next((v for v in available if v.endswith(f'-{req.lang}.wav')), available[0])
     if voice not in available:
         raise HTTPException(400, 'voz não encontrada')
@@ -325,7 +343,7 @@ def read_meta(job_id: str) -> dict | None:
 
 
 @app.get('/api/audio/{job_id}')
-def audio(job_id: str):
+def audio_file(job_id: str):
     return FileResponse(audio_path(job_id), media_type='audio/wav')
 
 
@@ -349,6 +367,52 @@ def forget(job_id: str):
     return {'ok': True}
 
 
+def voice_path(name: str) -> Path:
+    if not re.fullmatch(r'[a-z0-9-]{1,60}\.wav', name) or not (VOICES / name).exists():
+        raise HTTPException(404, 'voz não encontrada')
+    return VOICES / name
+
+
+@app.post('/api/voices')
+async def add_voice(request: Request, name: str, lang: str):
+    """The body is the recording itself (WAV, FLAC, OGG or MP3). It is trimmed to its best 12 s of
+    speech and saved as voices/<name>-<lang>.wav."""
+    if lang not in LANGUAGES:
+        raise HTTPException(400, 'idioma inválido')
+    base = slug(name, words=5)
+    body = await request.body()
+    if not body:
+        raise HTTPException(400, 'arquivo vazio')
+    if len(body) > MAX_UPLOAD:
+        raise HTTPException(413, 'arquivo grande demais (máximo 60 MB)')
+    try:
+        raw, sr = sf.read(io.BytesIO(body), dtype='float32', always_2d=True)
+    except Exception:
+        raise HTTPException(400, 'não consegui ler esse áudio (use WAV, FLAC, OGG ou MP3)')
+    try:
+        clip, speech_s = audio.prepare_reference(raw, sr)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    name = f'{base}-{lang}.wav'
+    buf = io.BytesIO()
+    sf.write(buf, clip, 24000, subtype='PCM_16', format='WAV')
+    write_atomic(VOICES / name, buf.getvalue())
+    prompts.pop(name, None)  # replaced: rebuild its speaker embedding on next use
+    return {'name': name, 'seconds': round(len(clip) / 24000, 1), 'speech': speech_s}
+
+
+@app.get('/api/voices/{name}')
+def voice_file(name: str):
+    return FileResponse(voice_path(name), media_type='audio/wav')
+
+
+@app.delete('/api/voices/{name}')
+def delete_voice(name: str):
+    voice_path(name).unlink()
+    prompts.pop(name, None)
+    return {'ok': True}
+
+
 @app.get('/api/pronuncia')
 def get_pronunciation():
     return load_pronunciation()
@@ -361,6 +425,13 @@ def put_pronunciation(rules: list[Rule]):
     clean = [{'de': r.de, 'para': r.para} for r in rules if r.de]
     write_atomic(PRONUNCIATION, json.dumps(clean, ensure_ascii=False, indent=2) + '\n')
     return clean
+
+
+@app.post('/api/shutdown')
+def shutdown():
+    """The page's "quit" button: frees the GPU memory right away."""
+    threading.Timer(0.5, lambda: os._exit(0)).start()
+    return {'ok': True}
 
 
 app.mount('/', StaticFiles(directory=ROOT / 'static', html=True), name='static')

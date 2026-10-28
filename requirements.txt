@@ -1,0 +1,14 @@
+# Everything except torch/torchaudio (installed per GPU by setup.sh / setup.ps1) and qwen-tts
+# (installed with --no-deps, because it would pull the CUDA build of torch).
+transformers==4.57.3
+accelerate==1.12.0
+librosa==1.0.0
+soundfile==0.14.0
+sox==1.5.0
+onnxruntime==1.31.1
+einops==0.8.2
+huggingface_hub==0.36.2
+fastapi==0.162.0
+uvicorn==0.54.0
+pyloudnorm==0.1.1
+scipy==1.18.1

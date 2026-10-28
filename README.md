@@ -1,70 +1,97 @@
-# Dude, We Late — Voice Studio
+<p align="center"><img src="brand/logo/lockup.svg" alt="mouthpiece" width="420"></p>
 
-Texto para fala com **a sua voz clonada**, rodando local na placa de vídeo (Intel Arc B580). Você digita,
-ouve uma prévia e baixa o WAV pronto para a edição. Também tem um **CLI**, para que o Claude Code gere
-narração sozinho enquanto edita vídeos.
+<p align="center"><b>your voice, typed.</b><br>Digite um texto e ouça com a sua própria voz. Tudo roda no seu computador.</p>
 
-Por baixo: [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (modelo 1.7B Base, clonagem de voz) via
-PyTorch XPU.
+---
+
+O Mouthpiece clona a sua voz a partir de uns 15 segundos de gravação e fala qualquer texto com ela, em
+**inglês ou português**. Você ouve a prévia e baixa um WAV pronto para a edição. Tem também um comando
+de terminal, para scripts e para o Claude Code gerarem narração sozinhos.
+
+Por baixo: [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) (1.7B, clonagem de voz) com PyTorch, na
+placa de vídeo (**Intel Arc** ou **NVIDIA**) ou, mais devagar, na CPU. Nada sai do seu computador.
 
 ## Instalar
 
-```bash
-./setup.sh                                       # uma vez: ambiente Python (~alguns GB)
-cp /caminho/sua-voz-en.wav voices/minha-voz-en.wav   # referência: 10-15 s de fala limpa
-cp /caminho/sua-voz-pt.wav voices/minha-voz-pt.wav
-ln -sf "$PWD/cli.py" ~/.local/bin/dwl-voice      # o comando dwl-voice
-ln -sfn "$PWD/claude-skill/narration" ~/.claude/skills/narration   # a skill do Claude Code
-```
+### Windows
 
-O modelo (~4 GB) baixa sozinho no primeiro uso, para `~/.cache/huggingface`.
+Baixe e rode `Mouthpiece-Setup-1.0.0.exe`. O instalador:
 
-## Usar pela página
+1. copia o app (sem pedir administrador);
+2. baixa o Python, o PyTorch certo para a sua placa e o modelo de voz, **alguns GB**, mostrando o
+   progresso numa janela;
+3. cria atalhos no Menu Iniciar (e na Área de Trabalho, se quiser) e o comando `mouthpiece`.
 
-```bash
-./start.sh        # abre http://127.0.0.1:7860
-```
+Requisitos: Windows 10/11 64 bits, ~10 GB livres. Recomendado: placa Intel Arc ou NVIDIA com 8 GB+.
 
-- Escolha **EN** ou **PT**, digite e clique **GERAR** (ou `Ctrl+Enter`).
-- A prévia toca sozinha. **BAIXAR WAV** salva o arquivo com nome tirado do texto.
-- **Histórico:** ouvir, baixar, reaproveitar o texto ou apagar.
-- **Pronúncia:** regras "escrito → falado" para nomes que o modelo erra (ex.: `Alien: Isolation` →
-  `Alien Isolation`). Valem para a página e para o CLI.
-
-## Usar pelo terminal
+### Linux
 
 ```bash
-dwl-voice say "Twelve years late." -o narracao.wav
-dwl-voice say -f roteiro.txt -o narracao.wav --lang pt
-echo "texto" | dwl-voice say - -o narracao.wav
-dwl-voice say "..." -o cena1.wav --json    # {"path", "duration", "frames_30", "frames_60", ...}
-dwl-voice pronuncia add "Alien: Isolation" "Alien Isolation"
-dwl-voice status | dwl-voice stop
+git clone https://github.com/sidnei-almeida/mouthpiece && cd mouthpiece
+./setup.sh                                   # detecta a placa e baixa tudo (alguns GB)
+ln -sf "$PWD/cli.py" ~/.local/bin/mouthpiece # o comando
+./start.sh                                   # abre o app
 ```
 
-Se o servidor não estiver rodando, o CLI liga ele sozinho e espera o modelo carregar.
+Precisa do [uv](https://docs.astral.sh/uv/). Para Intel Arc, o runtime de computação da Intel
+(`intel-compute-runtime` e `level-zero-loader`).
 
-## Com o Claude Code
+## Usar
 
-A skill `narration` (`claude-skill/narration/SKILL.md`) ensina o Claude a escrever a fala no tom do
-canal, gerar com `dwl-voice` e encaixar no Remotion usando a duração em frames. É só pedir, por
-exemplo: *"gera uma narração para essa cena explicando o motion tracker"*.
+1. **Vozes → Nova voz:** grave uns 15 a 30 s lendo o texto da tela, num lugar silencioso, ou envie
+   um arquivo. O clone copia o timbre **e o jeito** da gravação: grave no tom em que quer ouvir.
+2. **Falar:** escolha EN ou PT, digite e clique **Gerar** (ou `Ctrl+Enter`). A prévia toca sozinha.
+3. **Baixar WAV:** mono, 48 kHz, 24 bits, **-16 LUFS**, picos abaixo de -1,5 dBFS. Pronto para mixar.
 
-## Saída
+Uma linha em branco no texto vira uma pausa maior. Textos longos são divididos em frases sozinhos
+(até 6.000 caracteres por vez, uns 15 minutos de fala).
 
-WAV mono, 48 kHz, 24 bits, **-16 LUFS** e picos abaixo de -1,5 dBFS: pronto para mixar com o jogo
-(10–12 dB abaixo da voz).
+**Pronúncia:** regras "escrito → falado" para nomes que saem errados (ex.: `Alien: Isolation` →
+`Alien Isolation`). Valem para o app e para o terminal.
+
+**Sair:** o botão **Sair** fecha o Mouthpiece e libera a memória da placa. Sem uso, ele fecha sozinho
+depois de 20 minutos.
+
+## Terminal
+
+```bash
+mouthpiece say "Twelve years late." -o narracao.wav
+mouthpiece say -f roteiro.txt -o narracao.wav --lang pt
+echo "texto" | mouthpiece say - -o narracao.wav
+mouthpiece say "..." -o cena1.wav --json    # {"path", "duration", "frames_30", "frames_60", ...}
+mouthpiece voices | open | status | stop
+mouthpiece pronuncia add "Alien: Isolation" "Alien Isolation"
+```
+
+Se o app não estiver aberto, o comando abre o servidor sozinho e espera o modelo carregar.
+
+## Claude Code
+
+A skill `claude-skill/narration` ensina o Claude a escrever a fala, gerar com `mouthpiece` e encaixar
+no Remotion pela duração em frames. Instale com
+`ln -sfn "$PWD/claude-skill/narration" ~/.claude/skills/narration` e peça, por exemplo: *"gera uma
+narração para essa cena"*.
+
+## Onde ficam os seus arquivos
+
+| | Windows | Linux |
+|---|---|---|
+| Vozes, áudios gerados, regras | `%APPDATA%\Mouthpiece` | `~/.local/share/mouthpiece` (no clone do git: a própria pasta) |
+| Modelo (~4 GB) | `%USERPROFILE%\.cache\huggingface` | `~/.cache/huggingface` |
+
+Desinstalar remove o app, mas **mantém as suas vozes e o modelo**.
 
 ## Cuidados
 
-- **Não gere com um jogo aberto.** O jogo ocupa a placa, e o driver da Arc pode travar o trabalho.
-  Se isso acontecer, a página mostra **"GPU travada"** e o CLI avisa. Feche o jogo e reinicie o
-  Voice Studio (`dwl-voice stop`, ou `Ctrl+C` no terminal do `start.sh`).
-- Até 6.000 caracteres por geração (uns 15 minutos de fala).
-- O servidor só aceita acesso desta máquina (`127.0.0.1`/`localhost`). Nenhum site consegue usá-lo
-  para gerar áudio com a sua voz.
-- As versões dos pacotes e do modelo estão fixadas: uma atualização do Qwen3-TTS não muda a voz sem
-  aviso.
-- Velocidade na Arc: ~3 s de geração por segundo de fala, mais ~10 s para carregar o modelo.
-- O clone copia o timbre **e o jeito** da gravação de referência (veja `voices/README.md`).
-- As gravações da sua voz (`voices/*.wav`) e os áudios gerados (`output/`) ficam fora do git.
+- **Não gere com um jogo aberto.** O jogo disputa a placa e o driver pode travar a geração. O app
+  mostra **"placa travada"**: feche o jogo e reabra o Mouthpiece.
+- Use só a sua voz, ou a de quem autorizou. Clonar a voz de outra pessoa sem permissão é imitação.
+- Segurança: o servidor só aceita conexões do próprio computador e recusa pedidos vindos de outros
+  sites, para que nenhuma página consiga gerar áudio com a sua voz.
+
+## Desenvolvimento
+
+- `brand/` tem o kit de marca (`brand/BRAND.md`); `python3 brand/build.py` gera logos e ícones.
+- `install/windows/` tem o instalador (Inno Setup); `install/build-windows.sh` gera o `.exe` no Linux
+  via Wine.
+- Versões dos pacotes em `requirements.txt` e `setup.*`; o modelo é fixado em `server_model.py`.

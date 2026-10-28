@@ -1,7 +1,7 @@
 ---
 name: narration
 description: >
-  Write and generate voice-over in the owner's own cloned voice with the local `dwl-voice` CLI
+  Write and generate voice-over in the owner's own cloned voice with the local `mouthpiece` CLI
   (Qwen3-TTS on the Intel Arc), and place it in a Remotion timeline. Use when the user asks for
   narration, voice-over, a voice line, "narrar", "narração", "locução", "gera o áudio dessa cena",
   or when editing a video (Remotion or otherwise) where a scene needs spoken audio. Also for
@@ -10,9 +10,9 @@ description: >
 
 # Narration in the owner's voice
 
-`dwl-voice` turns text into speech in the owner's cloned voice. It runs locally: a server keeps the
+`mouthpiece` turns text into speech in the owner's cloned voice. It runs locally: a server keeps the
 model on the GPU and the CLI starts it on demand (first call ~10-70 s to load, then ~3 s of
-generation per second of speech). Source: `~/ai/dude-we-late-voice` (README, `server.py`, `cli.py`).
+generation per second of speech). Source: `~/ai/mouthpiece` (README, `server.py`, `cli.py`).
 
 ## 1. Write the line
 
@@ -28,9 +28,9 @@ generation per second of speech). Source: `~/ai/dude-we-late-voice` (README, `se
 ## 2. Generate
 
 ```bash
-dwl-voice say "Line to speak." -o public/narration/<scene>.wav --json      # English
-dwl-voice say -f script.txt -o public/narration/<scene>.wav --json         # from a file
-dwl-voice say "Fala aqui." -o public/narration/<scene>.wav --lang pt --json
+mouthpiece say "Line to speak." -o public/narration/<scene>.wav --json      # English
+mouthpiece say -f script.txt -o public/narration/<scene>.wav --json         # from a file
+mouthpiece say "Fala aqui." -o public/narration/<scene>.wav --lang pt --json
 ```
 
 `--json` prints `{"path", "duration", "frames_30", "frames_60", "generated_in"}`. Output is a
@@ -38,10 +38,10 @@ dwl-voice say "Fala aqui." -o public/narration/<scene>.wav --lang pt --json
 
 - Blank lines in the text become longer pauses; long text is split into sentences automatically.
 - Mispronounced name? Add a rule once and regenerate:
-  `dwl-voice pronuncia add "Alien: Isolation" "Alien Isolation"` (`dwl-voice pronuncia` lists them).
+  `mouthpiece pronuncia add "Alien: Isolation" "Alien Isolation"` (`mouthpiece pronuncia` lists them).
 - Never overwrite a narration file the user already approved; write a new name (`scene1-v2.wav`).
 - Generation hangs or is very slow: a game is probably using the GPU. Say so; don't loop retries.
-  `dwl-voice status` / `dwl-voice stop` manage the server.
+  `mouthpiece status` / `mouthpiece stop` manage the server.
 
 ## 3. Put it in Remotion
 
