@@ -305,7 +305,7 @@ async function loadHistory() {
     const meta = Object.assign(document.createElement('span'), { className: 'hint num', textContent: `${String(m.lang).toUpperCase()} · ${m.duration} s` });
     li.append(txt, meta,
       button('Ouvir', () => show(m)),
-      button('WAV', () => (location.href = `/api/download/${m.id}`)),
+      button('Baixar WAV', () => (location.href = `/api/download/${m.id}`)),
       button('Editar', () => { $('text').value = m.text; $('text').oninput(); setLang(m.lang); $('text').focus(); }),
       button('×', async () => { await call('DELETE', `/api/history/${m.id}`); loadHistory(); }, 'Apagar'));
     return li;
