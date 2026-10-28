@@ -38,8 +38,10 @@ Precisa do [uv](https://docs.astral.sh/uv/). Para Intel Arc, o runtime de comput
 
 ## Usar
 
-1. **Vozes → Nova voz:** grave uns 15 a 30 s lendo o texto da tela, num lugar silencioso, ou envie
-   um arquivo. O clone copia o timbre **e o jeito** da gravação: grave no tom em que quer ouvir.
+1. **Vozes → Nova voz:** leia em voz alta o roteiro da tela (1 a 2 minutos), num lugar silencioso.
+   Ele tem trechos com tons diferentes (normal, perguntas, empolgado, baixinho), números, nomes e
+   todos os sons do idioma, para o clone ter o máximo de dados da sua voz. Também dá para enviar um
+   arquivo. O clone usa os melhores 30 s; a gravação inteira fica guardada com o texto lido.
 2. **Falar:** escolha EN ou PT, digite e clique **Gerar** (ou `Ctrl+Enter`). A prévia toca sozinha.
 3. **Baixar WAV:** mono, 48 kHz, 24 bits, **-16 LUFS**, picos abaixo de -1,5 dBFS. Pronto para mixar.
 

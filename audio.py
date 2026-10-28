@@ -58,7 +58,7 @@ def finish(audio: np.ndarray, sr: int) -> np.ndarray:
     return limit(audio * gain, OUT_SR)
 
 
-def prepare_reference(audio: np.ndarray, sr: int, seconds: float = 12.0, out_sr: int = 24000) -> tuple[np.ndarray, float]:
+def prepare_reference(audio: np.ndarray, sr: int, seconds: float = 30.0, out_sr: int = 24000) -> tuple[np.ndarray, float]:
     """From a recording of someone reading: drop the silences, keep the `seconds`-long stretch with
     the most speech, normalize it to -20 LUFS. Returns (clip, seconds of speech found)."""
     audio = resample(to_mono(audio), sr, out_sr)
@@ -72,8 +72,8 @@ def prepare_reference(audio: np.ndarray, sr: int, seconds: float = 12.0, out_sr:
     floor = np.percentile(db, 10)
     voiced = db > max(floor + 15, -55)
     speech_s = voiced.sum() * 0.05
-    if speech_s < 4:
-        raise ValueError(f'só achei {speech_s:.0f} s de fala; grave pelo menos uns 10 s lendo o texto')
+    if speech_s < 8:
+        raise ValueError(f'só achei {speech_s:.0f} s de fala; leia pelo menos alguns trechos do texto (uns 20 s)')
     # Keep voiced frames plus a little air around them, so words aren't clipped.
     keep = maximum_filter1d(voiced.astype(np.uint8), size=7).astype(bool)
     speech = frames[keep].reshape(-1)

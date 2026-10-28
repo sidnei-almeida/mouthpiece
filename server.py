@@ -373,10 +373,21 @@ def voice_path(name: str) -> Path:
     return VOICES / name
 
 
+def reading_script(lang: str, script_id: str | None) -> str | None:
+    """The text the recorder showed (static/scripts.json), if the recording was made reading it."""
+    try:
+        script = json.loads((ROOT / 'static' / 'scripts.json').read_text())[lang]
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        return None
+    return ' '.join(s['text'] for s in script['sections']) if script.get('id') == script_id else None
+
+
 @app.post('/api/voices')
-async def add_voice(request: Request, name: str, lang: str):
-    """The body is the recording itself (WAV, FLAC, OGG or MP3). It is trimmed to its best 12 s of
-    speech and saved as voices/<name>-<lang>.wav."""
+async def add_voice(request: Request, name: str, lang: str, script: str | None = None):
+    """The body is the recording itself (WAV, FLAC, OGG or MP3). Its best 30 s of speech become the
+    clone reference, voices/<name>-<lang>.wav. The whole recording is kept too, in voices/raw/ with
+    the text that was read (when it came from the recorder): with an exact transcript, a future
+    version can use the model's more faithful transcript-based cloning."""
     if lang not in LANGUAGES:
         raise HTTPException(400, 'idioma inválido')
     base = slug(name, words=5)
@@ -390,7 +401,7 @@ async def add_voice(request: Request, name: str, lang: str):
     except Exception:
         raise HTTPException(400, 'não consegui ler esse áudio (use WAV, FLAC, OGG ou MP3)')
     try:
-        clip, speech_s = audio.prepare_reference(raw, sr)
+        clip, speech_s = audio.prepare_reference(raw, sr, seconds=30)
     except ValueError as e:
         raise HTTPException(400, str(e))
     name = f'{base}-{lang}.wav'
@@ -398,6 +409,13 @@ async def add_voice(request: Request, name: str, lang: str):
     sf.write(buf, clip, 24000, subtype='PCM_16', format='WAV')
     write_atomic(VOICES / name, buf.getvalue())
     prompts.pop(name, None)  # replaced: rebuild its speaker embedding on next use
+    (VOICES / 'raw').mkdir(exist_ok=True)
+    full = io.BytesIO()
+    sf.write(full, audio.to_mono(raw), sr, subtype='PCM_16', format='FLAC')
+    write_atomic(VOICES / 'raw' / f'{base}-{lang}.flac', full.getvalue())
+    meta = {'lang': lang, 'sample_rate': sr, 'seconds': round(len(raw) / sr, 1), 'speech': speech_s,
+            'script': script, 'transcript': reading_script(lang, script), 'created': datetime.now().isoformat(timespec='seconds')}
+    write_atomic(VOICES / 'raw' / f'{base}-{lang}.json', json.dumps(meta, ensure_ascii=False, indent=2))
     return {'name': name, 'seconds': round(len(clip) / 24000, 1), 'speech': speech_s}
 
 
@@ -410,6 +428,8 @@ def voice_file(name: str):
 def delete_voice(name: str):
     voice_path(name).unlink()
     prompts.pop(name, None)
+    for ext in ('.flac', '.json'):
+        (VOICES / 'raw' / name.replace('.wav', ext)).unlink(missing_ok=True)
     return {'ok': True}
 
 

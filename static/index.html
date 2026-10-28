@@ -83,7 +83,9 @@
   /* voices */
   .notice { display: none; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--signal); margin-bottom: 18px; }
   .notice button { margin-left: auto; }
-  .script { font-size: 17px; line-height: 1.7; padding: 16px; background: var(--bg); border-radius: 10px; margin: 12px 0; }
+  .script { max-height: 360px; overflow-y: auto; padding: 6px 18px; background: var(--bg); border-radius: 10px; margin: 12px 0; }
+  .script p { margin: 14px 0; font-size: 17px; line-height: 1.65; }
+  .script .cue { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--signal); margin-bottom: 2px; }
   .rec { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .recdot { width: 12px; height: 12px; border-radius: 50%; background: var(--signal); display: none; animation: blink 1s steps(2) infinite; }
   .meter { flex: 1; min-width: 160px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
@@ -155,8 +157,9 @@
   <section id="tab-voices" hidden>
     <div class="panel">
       <h2 style="margin-top:0">Nova voz</h2>
-      <p class="hint" style="margin-top:0">Grave uns 15 a 30 segundos lendo o texto abaixo, num lugar silencioso, no tom em que
-        quer ouvir a voz depois. O clone copia o timbre <strong>e o jeito</strong> de falar da gravação.</p>
+      <p class="hint" style="margin-top:0">Leia o texto abaixo inteiro (<span id="vminutes">1 a 2</span> minutos), num lugar silencioso, a um palmo do
+        microfone. Siga o tom indicado em cada trecho: quanto mais variada a leitura, mais dados da sua voz o clone tem. Errou?
+        Continue lendo, sem parar. O clone copia o timbre <strong>e o jeito</strong> de falar.</p>
       <div class="grid2">
         <label>Nome<input class="field" id="vname" placeholder="ex.: minha voz" maxlength="40"></label>
         <label>Idioma<select id="vlang"><option value="en">Inglês</option><option value="pt">Português</option></select></label>
@@ -332,13 +335,22 @@ $('saverules').onclick = async () => {
 };
 
 /* voices */
-const SCRIPTS = {
-  en: 'I started this game twelve years after everyone else. That is fine. The best part of being late is that nobody spoils the ending for you, because nobody is talking about it anymore. So let me tell you what I found, one room at a time, and why it stayed with me.',
-  pt: 'Eu comecei esse jogo doze anos depois de todo mundo. Tudo bem. A melhor parte de chegar atrasado é que ninguém estraga o final pra você, porque ninguém mais está falando dele. Então deixa eu te contar o que eu encontrei, uma sala de cada vez, e por que isso ficou comigo.',
-};
-const updateScript = () => ($('vscript').textContent = SCRIPTS[$('vlang').value]);
+// Reading scripts per language (static/scripts.json, also read by the server to keep the transcript):
+// sections with a tone cue, covering every sound of the language.
+let SCRIPTS = {};
+function updateScript() {
+  const sc = SCRIPTS[$('vlang').value];
+  if (!sc) return;
+  $('vminutes').textContent = sc.minutes.replace('-', ' a ');
+  $('vscript').replaceChildren(...sc.sections.map((s) => {
+    const p = document.createElement('p');
+    p.append(Object.assign(document.createElement('span'), { className: 'cue', textContent: s.cue }), s.text);
+    return p;
+  }));
+  $('vscript').scrollTop = 0;
+}
 $('vlang').onchange = updateScript;
-updateScript();
+fetch('scripts.json').then((r) => r.json()).then((j) => { SCRIPTS = j; updateScript(); });
 
 function renderVoices() {
   const rows = voices.map((v) => {
@@ -361,11 +373,14 @@ function confirmDelete(v) {
   return false;
 }
 
-async function saveVoice(blob) {
+async function saveVoice(blob, recorded = false) {
   const name = $('vname').value.trim() || 'minha voz';
+  const l = $('vlang').value;
+  // A recording made reading the on-screen script is stored with that text as its transcript.
+  const script = recorded && SCRIPTS[l] ? `&script=${SCRIPTS[l].id}` : '';
   $('vmsg').textContent = 'Processando…';
   try {
-    const r = await call('POST', `/api/voices?name=${encodeURIComponent(name)}&lang=${$('vlang').value}`, blob, { 'Content-Type': 'application/octet-stream' });
+    const r = await call('POST', `/api/voices?name=${encodeURIComponent(name)}&lang=${l}${script}`, blob, { 'Content-Type': 'application/octet-stream' });
     $('vmsg').textContent = `Voz "${r.name.replace(/\.wav$/, '')}" salva (${r.speech} s de fala). Use "Testar" para ouvir o clone.`;
     status();
   } catch (e) { $('vmsg').textContent = e.message; }
@@ -397,7 +412,7 @@ $('rec').onclick = async () => {
   const timer = setInterval(() => {
     const s = Math.floor((Date.now() - t0) / 1000);
     $('rectime').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-    if (s >= 60) stopRec();
+    if (s >= 180) stopRec();
   }, 250);
   rec = { stream, ctx, node, chunks, timer };
   $('rec').textContent = 'Parar e salvar'; $('recdot').style.display = 'block'; $('vmsg').textContent = '';
@@ -416,7 +431,7 @@ function stopRec() {
   v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
   let o = 44;
   for (const c of chunks) for (let i = 0; i < c.length; i++, o += 2) v.setInt16(o, Math.max(-1, Math.min(1, c[i])) * 0x7fff, true);
-  saveVoice(new Blob([buf], { type: 'audio/wav' }));
+  saveVoice(new Blob([buf], { type: 'audio/wav' }), true);
 }
 
 status();

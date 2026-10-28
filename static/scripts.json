@@ -1,0 +1,30 @@
+{
+  "en": {
+    "id": "en-1",
+    "minutes": "1-2",
+    "sections": [
+      {"cue": "Normal", "text": "Hi, this is my voice for Mouthpiece. I'm reading this at a calm, steady pace, the way I'd explain a game to a friend."},
+      {"cue": "Narration", "text": "The station was quiet. Through the thick glass, the planet turned slowly, a pale yellow giant wrapped in storms. Somewhere below, in the dark between decks, something was moving through the vents."},
+      {"cue": "Questions", "text": "Did you hear that? Was it the ship settling, or was it something else? And why does every corridor look exactly the same when you're lost?"},
+      {"cue": "Excited, louder", "text": "And then the lights went out, the alarm started screaming, and I just ran. No plan. Absolutely zero!"},
+      {"cue": "Quiet, almost a whisper", "text": "Okay. Breathe. Stay low, stay behind the crates, and don't make a sound."},
+      {"cue": "Numbers and names", "text": "It's October twenty-eighth, twenty twenty-six. Mission eighteen. Thirty-two minutes, seven deaths and one very judgmental android. Sevastopol, Weyland-Yutani, Amanda Ripley."},
+      {"cue": "Every sound", "text": "The thin thief thought three thousand thoughts, but she shouldn't measure the treasure with such vision. The quick brown fox jumps over the lazy dog, while big judges quietly vex the zealous crew. Very well, we'll weave the wool while the wolves wait."},
+      {"cue": "Closing, natural", "text": "That's it. Thanks for listening. Dude, we late: videos about games, eventually."}
+    ]
+  },
+  "pt": {
+    "id": "pt-1",
+    "minutes": "1-2",
+    "sections": [
+      {"cue": "Normal", "text": "Oi, essa é a minha voz para o Mouthpiece. Estou lendo num ritmo calmo e constante, do jeito que eu explicaria um jogo para um amigo."},
+      {"cue": "Narração", "text": "A estação estava em silêncio. Pelo vidro grosso, o planeta girava devagar, um gigante amarelo-pálido envolto em tempestades. Em algum lugar lá embaixo, no escuro entre os andares, alguma coisa se arrastava pelos dutos."},
+      {"cue": "Perguntas", "text": "Você ouviu isso? Foi a nave se acomodando, ou foi outra coisa? E por que todo corredor parece exatamente igual quando a gente está perdido?"},
+      {"cue": "Empolgado, mais alto", "text": "E aí, do nada, as luzes apagaram, o alarme começou a gritar e eu simplesmente corri. Nenhum plano. Zero!"},
+      {"cue": "Baixinho, quase sussurrando", "text": "Calma. Respira. Fica abaixado, atrás das caixas, e não faz barulho nenhum."},
+      {"cue": "Números e nomes", "text": "Hoje é vinte e oito de outubro de dois mil e vinte e seis. Missão dezoito. Trinta e dois minutos, sete mortes e um androide muito julgador. Sevastopol, Weyland-Yutani, Amanda Ripley."},
+      {"cue": "Todos os sons", "text": "O cão e o leão comeram pão com feijão no sertão. A filha do vizinho trabalha no velho carro, enquanto o rato roeu a roupa do rei de Roma. Chiclete, xícara, jeito, gente, assado e casado. Mãe, mães, põe e compõe."},
+      {"cue": "Fechamento, natural", "text": "É isso. Obrigado por ouvir. Dude, we late: vídeos sobre games, eventualmente."}
+    ]
+  }
+}
