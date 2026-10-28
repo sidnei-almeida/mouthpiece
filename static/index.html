@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Studio — Dude, We Late</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #061317;
+    --panel: #0b1d23;
+    --line: #17343c;
+    --accent: #19dae7;
+    --accent-dim: rgba(25, 218, 231, 0.45);
+    --text: #ebecec;
+    --muted: #8fb8b4;
+    --danger: #ff6b6b;
+    --mono: 'JetBrains Mono', monospace;
+    --title: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 15px; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 20px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+  h1 { font-family: var(--title); font-size: 40px; margin: 0; letter-spacing: 0.01em; display: flex; align-items: center; gap: 14px; }
+  h1 .chev { color: var(--accent); font-family: var(--mono); font-size: 30px; }
+  h1 small { font-family: var(--mono); font-size: 14px; font-weight: 400; color: var(--muted); letter-spacing: 0.2em; }
+  .pill { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 12px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.ready { color: var(--accent); border-color: var(--accent-dim); }
+  .pill.error { color: var(--danger); border-color: var(--danger); }
+  textarea { width: 100%; min-height: 220px; resize: vertical; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    padding: 16px; font: inherit; font-size: 16px; line-height: 1.6; outline: none; }
+  textarea:focus { border-color: var(--accent-dim); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); }
+  .seg button { background: none; border: 0; color: var(--muted); padding: 9px 14px; font: inherit; cursor: pointer; letter-spacing: 0.1em; }
+  .seg button.on { background: var(--accent); color: var(--bg); font-weight: 500; }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 9px 10px; font: inherit; }
+  .grow { flex: 1; }
+  .hint { color: var(--muted); font-size: 12px; }
+  button.primary { background: var(--accent); color: var(--bg); border: 0; padding: 11px 22px; font: inherit; font-weight: 500;
+    letter-spacing: 0.15em; cursor: pointer; }
+  button.primary:disabled { opacity: 0.4; cursor: default; }
+  button.ghost { background: none; border: 1px solid var(--line); color: var(--text); padding: 8px 12px; font: inherit; cursor: pointer; }
+  button.ghost:hover { border-color: var(--accent-dim); }
+  .progress { margin-top: 22px; display: none; align-items: center; gap: 16px; color: var(--accent); letter-spacing: 0.18em; font-size: 13px; }
+  .bar { width: 320px; height: 16px; border: 2px solid var(--accent-dim); position: relative; }
+  .bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); transition: width 0.3s; }
+  .result { margin-top: 22px; padding: 18px; border: 1px solid var(--line); background: var(--panel); display: none; }
+  .result .row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  audio { width: 100%; margin-bottom: 14px; }
+  .error { color: var(--danger); margin-top: 16px; }
+  h2 { font-family: var(--title); font-size: 24px; margin: 44px 0 12px; letter-spacing: 0.02em; }
+  .history { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+  .history li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .history .txt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  details { margin-top: 44px; border: 1px solid var(--line); padding: 14px 16px; }
+  summary { cursor: pointer; font-family: var(--title); font-size: 22px; }
+  .rules { margin-top: 14px; display: grid; gap: 8px; }
+  .rule { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 8px; align-items: center; }
+  .rule input { background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 8px 10px; font: inherit; }
+  .arrow { color: var(--accent); }
+  kbd { border: 1px solid var(--line); padding: 1px 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1><span class="chev">&gt;</span> VOICE STUDIO <small>DUDE, WE LATE</small></h1>
+    <span class="pill" id="status">carregando…</span>
+  </header>
+
+  <textarea id="text" placeholder="Digite o texto. Parágrafos viram pausas maiores."></textarea>
+
+  <div class="controls">
+    <div class="seg" id="lang">
+      <button data-lang="en" class="on">EN</button>
+      <button data-lang="pt">PT</button>
+    </div>
+    <select id="voice" title="Voz de referência (pasta voices/)"></select>
+    <span class="hint grow" id="estimate"></span>
+    <button class="primary" id="go" disabled>GERAR</button>
+  </div>
+  <div class="hint" style="margin-top:8px"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> gera</div>
+
+  <div class="progress" id="progress"><div class="bar"><i id="fill"></i></div><span id="ptext">LOADING...</span></div>
+  <div class="error" id="error"></div>
+
+  <div class="result" id="result">
+    <audio id="player" controls></audio>
+    <div class="row">
+      <button class="primary" id="download">BAIXAR WAV</button>
+      <span class="hint" id="rinfo"></span>
+    </div>
+  </div>
+
+  <h2>HISTÓRICO</h2>
+  <ul class="history" id="history"></ul>
+
+  <details>
+    <summary>Pronúncia</summary>
+    <p class="hint">Antes de falar, o texto da esquerda é trocado pelo da direita. Use para nomes que o modelo erra
+      (ex.: <em>Alien: Isolation</em> → <em>Alien Isolation</em>).</p>
+    <div class="rules" id="rules"></div>
+    <div class="controls">
+      <button class="ghost" id="addrule">+ regra</button>
+      <button class="ghost" id="saverules">salvar</button>
+      <span class="hint" id="rulesmsg"></span>
+    </div>
+  </details>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let lang = localStorage.getItem('lang') || 'en';
+let voices = [];
+let current = null;
+
+function setLang(l) {
+  lang = l;
+  try { localStorage.setItem('lang', l); } catch {}
+  document.querySelectorAll('#lang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === l));
+  const match = voices.find((v) => v.endsWith(`-${l}.wav`));
+  if (match) $('voice').value = match;
+}
+document.querySelectorAll('#lang button').forEach((b) => (b.onclick = () => setLang(b.dataset.lang)));
+
+async function status() {
+  const s = await (await fetch('/api/status')).json();
+  const pill = $('status');
+  if (s.status === 'ready') {
+    pill.textContent = `pronto · ${s.gpu}`;
+    pill.className = 'pill ready';
+    $('go').disabled = false;
+  } else if (s.status === 'error') {
+    pill.textContent = 'erro ao carregar';
+    pill.className = 'pill error';
+    $('error').textContent = s.error;
+  } else {
+    pill.textContent = 'carregando modelo…';
+    setTimeout(status, 2000);
+  }
+  if (!voices.length) {
+    voices = s.voices;
+    $('voice').innerHTML = voices.map((v) => `<option>${v}</option>`).join('');
+    setLang(lang);
+  }
+}
+
+// ~2.6 words a second of speech; the Arc generates about 3x slower than real time.
+$('text').oninput = () => {
+  const words = $('text').value.trim().split(/\s+/).filter(Boolean).length;
+  const secs = words / 2.6;
+  $('estimate').textContent = words ? `${words} palavras · ~${Math.round(secs)} s de fala · ~${Math.round(secs * 3 + 5)} s para gerar` : '';
+};
+
+async function generate() {
+  const text = $('text').value.trim();
+  if (!text || $('go').disabled) return;
+  $('go').disabled = true;
+  $('error').textContent = '';
+  $('result').style.display = 'none';
+  $('progress').style.display = 'flex';
+  $('fill').style.width = '0';
+  const t0 = Date.now();
+  try {
+    const r = await fetch('/api/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, lang, voice: $('voice').value }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail);
+    const { id } = await r.json();
+    let job;
+    do {
+      await new Promise((res) => setTimeout(res, 700));
+      job = await (await fetch(`/api/jobs/${id}`)).json();
+      const pct = job.total ? job.done / job.total : 0;
+      $('fill').style.width = `${Math.max(4, pct * 100)}%`;
+      const secs = Math.round((Date.now() - t0) / 1000);
+      $('ptext').textContent = job.state === 'queued' ? 'NA FILA...' : `LOADING... ${job.done}/${job.total} · ${secs}s`;
+    } while (job.state === 'queued' || job.state === 'running');
+    if (job.state === 'error') throw new Error(job.error);
+    show(job);
+    loadHistory();
+  } catch (e) {
+    $('error').textContent = e.message;
+  } finally {
+    $('progress').style.display = 'none';
+    $('go').disabled = false;
+  }
+}
+
+function show(job) {
+  current = job;
+  $('player').src = `/api/audio/${job.id}`;
+  $('player').play().catch(() => {});
+  $('rinfo').textContent = `${job.duration} s de áudio · gerado em ${job.seconds} s · ${job.filename}`;
+  $('result').style.display = 'block';
+}
+$('download').onclick = () => current && (location.href = `/api/download/${current.id}`);
+$('go').onclick = generate;
+document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.key === 'Enter') generate(); });
+
+async function loadHistory() {
+  const items = await (await fetch('/api/history')).json();
+  $('history').innerHTML = '';
+  for (const m of items) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="txt"></span><span class="meta">${m.lang.toUpperCase()} · ${m.duration}s</span>`;
+    li.querySelector('.txt').textContent = m.text;
+    li.querySelector('.txt').title = m.text;
+    const play = Object.assign(document.createElement('button'), { className: 'ghost', textContent: '▶' });
+    play.onclick = () => show(m);
+    const dl = Object.assign(document.createElement('button'), { className: 'ghost', textContent: 'WAV' });
+    dl.onclick = () => (location.href = `/api/download/${m.id}`);
+    const reuse = Object.assign(document.createElement('button'), { className: 'ghost', textContent: 'editar' });
+    reuse.onclick = () => { $('text').value = m.text; $('text').oninput(); setLang(m.lang); $('text').focus(); };
+    const del = Object.assign(document.createElement('button'), { className: 'ghost', textContent: '×', title: 'apagar' });
+    del.onclick = async () => { await fetch(`/api/history/${m.id}`, { method: 'DELETE' }); loadHistory(); };
+    li.append(play, dl, reuse, del);
+    $('history').append(li);
+  }
+  if (!items.length) $('history').innerHTML = '<li class="hint">Nada gerado ainda.</li>';
+}
+
+function ruleRow(r = { de: '', para: '' }) {
+  const row = document.createElement('div');
+  row.className = 'rule';
+  row.innerHTML = '<input placeholder="escrito"><span class="arrow">→</span><input placeholder="falado"><button class="ghost">×</button>';
+  const [de, para] = row.querySelectorAll('input');
+  de.value = r.de; para.value = r.para;
+  row.querySelector('button').onclick = () => row.remove();
+  $('rules').append(row);
+}
+async function loadRules() {
+  $('rules').innerHTML = '';
+  (await (await fetch('/api/pronuncia')).json()).forEach(ruleRow);
+}
+$('addrule').onclick = () => ruleRow();
+$('saverules').onclick = async () => {
+  const rules = [...document.querySelectorAll('.rule')].map((r) => {
+    const [de, para] = r.querySelectorAll('input');
+    return { de: de.value, para: para.value };
+  });
+  await fetch('/api/pronuncia', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rules) });
+  $('rulesmsg').textContent = 'salvo';
+  setTimeout(() => ($('rulesmsg').textContent = ''), 1500);
+  loadRules();
+};
+
+status();
+loadHistory();
+loadRules();
+</script>
+</body>
+</html>

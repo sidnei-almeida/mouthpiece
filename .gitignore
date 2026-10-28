@@ -1,0 +1,13 @@
+.venv
+output/
+voices/*.wav
+voices/raw/
+__pycache__/
+dist/
+.*/
+!.github/
+*.md
+!README.md
+!brand/BRAND.md
+!voices/README.md
+!claude-skill/**/SKILL.md
