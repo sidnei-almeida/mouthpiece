@@ -243,9 +243,13 @@ function setLang(l) {
   lang = l;
   try { localStorage.setItem('lang', l); } catch {}
   document.querySelectorAll('#lang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === l));
-  const match = voices.find((v) => v.endsWith(`-${l}.wav`));
+  // The voice last picked for this language, else the first one made for it.
+  let saved = null;
+  try { saved = localStorage.getItem(`voice-${l}`); } catch {}
+  const match = voices.includes(saved) ? saved : voices.find((v) => v.endsWith(`-${l}.wav`));
   if (match) $('voice').value = match;
 }
+$('voice').onchange = () => { try { localStorage.setItem(`voice-${lang}`, $('voice').value); } catch {} };
 document.querySelectorAll('#lang button').forEach((b) => (b.onclick = () => setLang(b.dataset.lang)));
 setLang(lang);
 
