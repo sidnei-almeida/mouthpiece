@@ -249,7 +249,16 @@ function setLang(l) {
   const match = voices.includes(saved) ? saved : voices.find((v) => v.endsWith(`-${l}.wav`));
   if (match) $('voice').value = match;
 }
-$('voice').onchange = () => { try { localStorage.setItem(`voice-${lang}`, $('voice').value); } catch {} };
+const voiceLang = (v) => (v.endsWith('-pt.wav') ? 'pt' : 'en');
+// A pick is remembered under the voice's own language, not the one on screen: picking a PT voice
+// while EN is on must still bring it back when PT is clicked.
+$('voice').onchange = () => { const v = $('voice').value; try { localStorage.setItem(`voice-${voiceLang(v)}`, v); } catch {} };
+// Selects a voice on the Speak tab (and its language), remembered as that language's pick.
+function pickVoice(v) {
+  setLang(voiceLang(v));
+  $('voice').value = v;
+  $('voice').onchange();
+}
 document.querySelectorAll('#lang button').forEach((b) => (b.onclick = () => setLang(b.dataset.lang)));
 setLang(lang);
 
@@ -361,7 +370,7 @@ function renderVoices() {
     const li = document.createElement('li');
     li.append(Object.assign(document.createElement('span'), { className: 'txt', textContent: v.replace(/\.wav$/, '') }),
       button('Referência', () => { $('vplayer').src = `/api/voices/${encodeURIComponent(v)}`; $('vplayer').play(); }, 'Ouvir a gravação usada no clone'),
-      button('Testar', () => { tab('speak'); const l = v.endsWith('-pt.wav') ? 'pt' : 'en'; generate(l === 'pt' ? 'Olá. Esta é a minha voz no Mouthpiece.' : 'Hi. This is my voice in Mouthpiece.', v, l); }),
+      button('Testar', () => { tab('speak'); pickVoice(v); generate(lang === 'pt' ? 'Olá. Esta é a minha voz no Mouthpiece.' : 'Hi. This is my voice in Mouthpiece.', v, lang); }),
       button('×', async () => { if (confirmDelete(v)) { await call('DELETE', `/api/voices/${encodeURIComponent(v)}`); status(); } }, 'Apagar'));
     return li;
   });
@@ -377,8 +386,15 @@ function confirmDelete(v) {
   return false;
 }
 
+// Without a name every voice would be saved as "minha voz", silently replacing the last one.
+function needName() {
+  if ($('vname').value.trim()) return false;
+  $('vmsg').textContent = 'Dê um nome para a voz antes de gravar ou escolher um arquivo.';
+  $('vname').focus();
+  return true;
+}
 async function saveVoice(blob, recorded = false) {
-  const name = $('vname').value.trim() || 'minha voz';
+  const name = $('vname').value.trim();
   const l = $('vlang').value;
   // A recording made reading the on-screen script is stored with that text as its transcript.
   const script = recorded && SCRIPTS[l] ? `&script=${SCRIPTS[l].id}` : '';
@@ -386,10 +402,11 @@ async function saveVoice(blob, recorded = false) {
   try {
     const r = await call('POST', `/api/voices?name=${encodeURIComponent(name)}&lang=${l}${script}`, blob, { 'Content-Type': 'application/octet-stream' });
     $('vmsg').textContent = `Voz "${r.name.replace(/\.wav$/, '')}" salva (${r.speech} s de fala). Use "Testar" para ouvir o clone.`;
-    status();
+    await status();
+    pickVoice(r.name);
   } catch (e) { $('vmsg').textContent = e.message; }
 }
-$('pick').onclick = () => $('vfile').click();
+$('pick').onclick = () => needName() || $('vfile').click();
 $('vfile').onchange = () => { const f = $('vfile').files[0]; if (f) saveVoice(f); $('vfile').value = ''; };
 
 // Recording: raw PCM from the microphone (no browser noise suppression, which smears the voice),
@@ -397,6 +414,7 @@ $('vfile').onchange = () => { const f = $('vfile').files[0]; if (f) saveVoice(f)
 let rec = null;
 $('rec').onclick = async () => {
   if (rec) return stopRec();
+  if (needName()) return;
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
