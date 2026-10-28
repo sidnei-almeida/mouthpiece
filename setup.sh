@@ -8,7 +8,9 @@ uv=$(command -v uv || true)
 [ -x "$uv" ] && "$uv" --version >/dev/null 2>&1 || uv=$(ls ~/.local/share/mise/installs/uv/*/uv-*/uv 2>/dev/null | tail -1)
 
 "$uv" venv --python 3.12 .venv
-"$uv" pip install --python .venv/bin/python torch torchaudio --index-url https://download.pytorch.org/whl/xpu
-"$uv" pip install --python .venv/bin/python transformers==4.57.3 accelerate==1.12.0 librosa soundfile sox \
-  onnxruntime einops huggingface_hub fastapi uvicorn
-"$uv" pip install --python .venv/bin/python --no-deps qwen-tts
+# Pinned to the versions this was built and tested with (2026-10-28); upgrade on purpose, then retest.
+"$uv" pip install --python .venv/bin/python torch==2.14.1 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/xpu
+"$uv" pip install --python .venv/bin/python transformers==4.57.3 accelerate==1.12.0 librosa==1.0.0 \
+  soundfile==0.14.0 sox==1.5.0 onnxruntime==1.31.1 einops==0.8.2 huggingface_hub==0.36.2 \
+  fastapi==0.162.0 uvicorn==0.54.0
+"$uv" pip install --python .venv/bin/python --no-deps qwen-tts==0.1.1

@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -35,8 +36,17 @@ PIDFILE, LOG = STATE / 'server.pid', STATE / 'server.log'
 def api(method: str, path: str, body=None, timeout=10):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(URL + path, data=data, method=method, headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:  # the server's own message, not a traceback
+        try:
+            detail = json.loads(e.read()).get('detail')
+        except ValueError:
+            detail = None
+        if isinstance(detail, list):  # validation errors
+            detail = '; '.join(d.get('msg', str(d)) for d in detail)
+        sys.exit(f'error: {detail or e}')
 
 
 def err(msg: str):
@@ -44,33 +54,51 @@ def err(msg: str):
 
 
 def server_status():
+    """The server's status, None if nothing listens, or {'status': 'foreign'} if something else does."""
     try:
-        return api('GET', '/api/status', timeout=3)
+        with urllib.request.urlopen(URL + '/api/status', timeout=3) as r:
+            s = json.loads(r.read())
+        return s if isinstance(s, dict) and 'status' in s else {'status': 'foreign'}
+    except urllib.error.HTTPError:
+        return {'status': 'foreign'}
+    except ValueError:
+        return {'status': 'foreign'}
     except (urllib.error.URLError, ConnectionError, TimeoutError):
         return None
 
 
+def log_tail(n: int = 15) -> str:
+    try:
+        return '\n'.join(LOG.read_text().splitlines()[-n:])
+    except FileNotFoundError:
+        return ''
+
+
 def ensure_server(wait: bool = True) -> dict:
-    s = server_status()
+    s, proc = server_status(), None
+    if s and s['status'] == 'foreign':
+        sys.exit(f'something else is using {URL}; free the port or set DWL_VOICE_URL')
     if s is None:
         STATE.mkdir(parents=True, exist_ok=True)
         err('voice server not running; starting it (the model takes ~10-70 s to load)')
+        port = str(urllib.parse.urlsplit(URL).port or 7860)
         proc = subprocess.Popen(
-            [str(ROOT / '.venv' / 'bin' / 'uvicorn'), 'server:app', '--host', '127.0.0.1', '--port', URL.rsplit(':', 1)[1]],
+            [str(ROOT / '.venv' / 'bin' / 'uvicorn'), 'server:app', '--host', '127.0.0.1', '--port', port],
             cwd=ROOT, stdout=open(LOG, 'a'), stderr=subprocess.STDOUT, start_new_session=True,
         )
         PIDFILE.write_text(str(proc.pid))
     t0 = time.time()
-    while wait:
+    while True:
         s = server_status()
-        if s and s['status'] == 'ready':
+        if proc and proc.poll() is not None:
+            sys.exit(f'the voice server exited during startup:\n{log_tail()}')
+        if s and s['status'] in ('error', 'stuck'):
+            sys.exit(f'voice server: {s["error"]}')
+        if s and (s['status'] == 'ready' or (not wait and s['status'] == 'loading')):
             return s
-        if s and s['status'] == 'error':
-            sys.exit(f'model failed to load: {s["error"]}')
         if time.time() - t0 > 300:
             sys.exit(f'server not ready after 5 min; see {LOG}')
         time.sleep(1.5)
-    return s
 
 
 def cmd_say(a):
@@ -86,6 +114,8 @@ def cmd_say(a):
     job = api('POST', '/api/generate', {'text': text, 'lang': a.lang, 'voice': a.voice})
     jid, t0, last = job['id'], time.time(), None
     while True:
+        if server_status() is None:
+            sys.exit('the voice server stopped while generating')
         job = api('GET', f'/api/jobs/{jid}')
         if job['state'] in ('done', 'error'):
             break
@@ -119,24 +149,32 @@ def cmd_status(_):
     print(json.dumps(s, ensure_ascii=False) if s else 'not running')
 
 
+def ours(pid: int) -> bool:
+    """Whether pid is still our uvicorn: after a crash the number can be reused by another program."""
+    try:
+        cmd = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')
+    except FileNotFoundError:
+        return False
+    return any(b'uvicorn' in c for c in cmd) and b'server:app' in cmd
+
+
 def cmd_stop(_):
-    if PIDFILE.exists():
-        try:
-            os.killpg(int(PIDFILE.read_text()), signal.SIGTERM)
-            print('stopped')
-        except ProcessLookupError:
-            print('not running')
-        PIDFILE.unlink()
-    else:
+    if not PIDFILE.exists():
         print('no server started by dwl-voice (one opened with start.sh stops with Ctrl+C)')
+        return
+    pid = int(PIDFILE.read_text())
+    if ours(pid):
+        os.killpg(pid, signal.SIGTERM)
+        print('stopped')
+    else:
+        print('not running')
+    PIDFILE.unlink()
 
 
 def cmd_pronuncia(a):
-    ensure_server(wait=False)
-    for _ in range(40):  # the API answers before the model is ready
-        if server_status():
-            break
-        time.sleep(0.5)
+    if a.action in ('add', 'rm') and not a.de:
+        sys.exit(f'usage: dwl-voice pronuncia {a.action} "written"' + (' "spoken"' if a.action == 'add' else ''))
+    ensure_server(wait=False)  # the rules API answers before the model is ready
     rules = api('GET', '/api/pronuncia')
     if a.action == 'add':
         rules = [r for r in rules if r['de'] != a.de] + [{'de': a.de, 'para': a.para}]

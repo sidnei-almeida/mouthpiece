@@ -127,38 +127,59 @@ function setLang(l) {
 }
 document.querySelectorAll('#lang button').forEach((b) => (b.onclick = () => setLang(b.dataset.lang)));
 
+let busy = false;
+// Polled the whole time, so the page notices a stuck GPU or a server that went away.
 async function status() {
-  const s = await (await fetch('/api/status')).json();
   const pill = $('status');
+  let s;
+  try {
+    s = await (await fetch('/api/status')).json();
+  } catch {
+    pill.textContent = 'servidor desligado';
+    pill.className = 'pill error';
+    $('go').disabled = true;
+    setTimeout(status, 3000);
+    return;
+  }
   if (s.status === 'ready') {
     pill.textContent = `pronto · ${s.gpu}`;
     pill.className = 'pill ready';
-    $('go').disabled = false;
-  } else if (s.status === 'error') {
-    pill.textContent = 'erro ao carregar';
+    $('go').disabled = busy;
+  } else if (s.status === 'loading') {
+    pill.textContent = 'carregando modelo…';
+    pill.className = 'pill';
+    $('go').disabled = true;
+  } else {
+    pill.textContent = s.status === 'stuck' ? 'GPU travada' : 'erro ao carregar';
     pill.className = 'pill error';
     $('error').textContent = s.error;
-  } else {
-    pill.textContent = 'carregando modelo…';
-    setTimeout(status, 2000);
+    $('go').disabled = true;
   }
-  if (!voices.length) {
+  if (s.max_text) $('text').maxLength = s.max_text;
+  if (!voices.length && s.voices.length) {
     voices = s.voices;
-    $('voice').innerHTML = voices.map((v) => `<option>${v}</option>`).join('');
+    $('voice').replaceChildren(...voices.map((v) => Object.assign(document.createElement('option'), { textContent: v })));
     setLang(lang);
   }
+  setTimeout(status, s.status === 'loading' ? 2000 : 5000);
 }
+
+// FastAPI errors come as a string or as a list of validation errors.
+const detail = (d) => (Array.isArray(d) ? d.map((x) => x.msg).join('; ') : d) || 'erro';
 
 // ~2.6 words a second of speech; the Arc generates about 3x slower than real time.
 $('text').oninput = () => {
   const words = $('text').value.trim().split(/\s+/).filter(Boolean).length;
   const secs = words / 2.6;
-  $('estimate').textContent = words ? `${words} palavras · ~${Math.round(secs)} s de fala · ~${Math.round(secs * 3 + 5)} s para gerar` : '';
+  const left = $('text').maxLength > 0 ? $('text').maxLength - $('text').value.length : null;
+  const limit = left !== null && left < 500 ? ` · faltam ${left} caracteres` : '';
+  $('estimate').textContent = words ? `${words} palavras · ~${Math.round(secs)} s de fala · ~${Math.round(secs * 3 + 5)} s para gerar${limit}` : '';
 };
 
 async function generate() {
   const text = $('text').value.trim();
   if (!text || $('go').disabled) return;
+  busy = true;
   $('go').disabled = true;
   $('error').textContent = '';
   $('result').style.display = 'none';
@@ -170,12 +191,14 @@ async function generate() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, lang, voice: $('voice').value }),
     });
-    if (!r.ok) throw new Error((await r.json()).detail);
+    if (!r.ok) throw new Error(detail((await r.json()).detail));
     const { id } = await r.json();
     let job;
     do {
       await new Promise((res) => setTimeout(res, 700));
-      job = await (await fetch(`/api/jobs/${id}`)).json();
+      const jr = await fetch(`/api/jobs/${id}`);
+      if (!jr.ok) throw new Error('o servidor perdeu este trabalho (foi reiniciado?)');
+      job = await jr.json();
       const pct = job.total ? job.done / job.total : 0;
       $('fill').style.width = `${Math.max(4, pct * 100)}%`;
       const secs = Math.round((Date.now() - t0) / 1000);
@@ -187,8 +210,9 @@ async function generate() {
   } catch (e) {
     $('error').textContent = e.message;
   } finally {
+    busy = false;
     $('progress').style.display = 'none';
-    $('go').disabled = false;
+    $('go').disabled = $('status').className !== 'pill ready';
   }
 }
 
@@ -208,7 +232,8 @@ async function loadHistory() {
   $('history').innerHTML = '';
   for (const m of items) {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="txt"></span><span class="meta">${m.lang.toUpperCase()} · ${m.duration}s</span>`;
+    li.innerHTML = '<span class="txt"></span><span class="meta"></span>';
+    li.querySelector('.meta').textContent = `${String(m.lang).toUpperCase()} · ${m.duration}s`;
     li.querySelector('.txt').textContent = m.text;
     li.querySelector('.txt').title = m.text;
     const play = Object.assign(document.createElement('button'), { className: 'ghost', textContent: '▶' });

@@ -58,6 +58,13 @@ WAV mono, 48 kHz, 24 bits, **-16 LUFS** e picos abaixo de -1,5 dBFS: pronto para
 ## Cuidados
 
 - **Não gere com um jogo aberto.** O jogo ocupa a placa, e o driver da Arc pode travar o trabalho.
+  Se isso acontecer, a página mostra **"GPU travada"** e o CLI avisa. Feche o jogo e reinicie o
+  Voice Studio (`dwl-voice stop`, ou `Ctrl+C` no terminal do `start.sh`).
+- Até 6.000 caracteres por geração (uns 15 minutos de fala).
+- O servidor só aceita acesso desta máquina (`127.0.0.1`/`localhost`). Nenhum site consegue usá-lo
+  para gerar áudio com a sua voz.
+- As versões dos pacotes e do modelo estão fixadas: uma atualização do Qwen3-TTS não muda a voz sem
+  aviso.
 - Velocidade na Arc: ~3 s de geração por segundo de fala, mais ~10 s para carregar o modelo.
 - O clone copia o timbre **e o jeito** da gravação de referência (veja `voices/README.md`).
 - As gravações da sua voz (`voices/*.wav`) e os áudios gerados (`output/`) ficam fora do git.
