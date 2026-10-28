@@ -27,8 +27,5 @@ echo "backend: $backend"
 "$uv" pip install --python .venv/bin/python torch==2.14.1 torchaudio==2.11.0 --index-url "https://download.pytorch.org/whl/$backend"
 "$uv" pip install --python .venv/bin/python -r requirements.txt
 "$uv" pip install --python .venv/bin/python --no-deps qwen-tts==0.1.1
-.venv/bin/python -c "
-from huggingface_hub import snapshot_download
-import server_model
-snapshot_download(server_model.MODEL_ID, revision=server_model.MODEL_REVISION)
-print('model ready')"
+.venv/bin/python fetch_model.py
+echo "model ready"

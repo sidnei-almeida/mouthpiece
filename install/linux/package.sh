@@ -7,7 +7,7 @@ version=${1:?version}
 name=mouthpiece-$version-linux
 stage=$(mktemp -d)/$name
 mkdir -p "$stage" dist
-cp server.py server_model.py audio.py cli.py launcher.pyw start.sh setup.sh requirements.txt pronuncia.json README.md "$stage"/
+cp server.py server_model.py fetch_model.py audio.py cli.py launcher.pyw start.sh setup.sh requirements.txt pronuncia.json README.md "$stage"/
 cp -r static claude-skill "$stage"/
 mkdir -p "$stage/brand/icon" "$stage/voices"
 cp brand/icon/icon.svg brand/icon/icon-256.png "$stage/brand/icon/"

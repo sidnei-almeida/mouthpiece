@@ -54,6 +54,7 @@ Name: "desktop"; Description: "{cm:Desktop}"
 [Files]
 Source: "{#Root}\server.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Root}\server_model.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Root}\fetch_model.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Root}\audio.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Root}\cli.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Root}\launcher.pyw"; DestDir: "{app}"; Flags: ignoreversion
@@ -82,6 +83,9 @@ Type: filesandordirs; Name: "{app}\__pycache__"
 Type: files; Name: "{app}\setup.log"
 
 [Code]
+procedure ExitProcess(uExitCode: Integer);
+  external 'ExitProcess@kernel32.dll stdcall';
+
 // Runs setup.ps1 in a visible console (so the long download shows progress). If it fails, offers to
 // retry; a silent install (/VERYSILENT) gives up instead and exits with an error code.
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -100,7 +104,8 @@ begin
             and FileExists(ExpandConstant('{app}\bin\mouthpiece.cmd'));
     until Ok or (SuppressibleMsgBox(FmtMessage(CustomMessage('SetupFailed'), [ExpandConstant('{app}\setup.log')]),
                                     mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY);
-    if not Ok then
-      RaiseException('setup.ps1 failed; see ' + ExpandConstant('{app}\setup.log'));
+    // A silent install (scripts, CI) must fail loudly: Inno Setup would otherwise exit with 0.
+    if not Ok and WizardSilent then
+      ExitProcess(2);
   end;
 end;

@@ -23,7 +23,12 @@ Start-Transcript -Path $Log -Force | Out-Null
 
 function Step($text) { Write-Host "`n>> $text" -ForegroundColor White }
 function Run($exe, [string[]]$arguments) {
-    & $exe @arguments
+    # stderr goes through the transcript too, so a failure always shows why. 'Continue' because
+    # Windows PowerShell 5.1 turns any stderr line into a terminating error under 'Stop'.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $exe @arguments 2>&1 | ForEach-Object { Write-Host "  $_" } }
+    finally { $ErrorActionPreference = $previous }
     if ($LASTEXITCODE -ne 0) { throw "$([IO.Path]::GetFileName($exe)) falhou (codigo $LASTEXITCODE)" }
 }
 
@@ -78,7 +83,7 @@ try {
     Step 'Modelo de voz (~4 GB)'
     Push-Location $App
     try {
-        Run $Py @('-c', 'from huggingface_hub import snapshot_download; import server_model as m; snapshot_download(m.MODEL_ID, revision=m.MODEL_REVISION); print("ok")')
+        Run $Py @((Join-Path $App 'fetch_model.py'))
     } finally { Pop-Location }
 
     Step 'Comando mouthpiece no terminal'
