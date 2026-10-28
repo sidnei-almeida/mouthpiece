@@ -27,7 +27,12 @@ function Run($exe, [string[]]$arguments) {
     # Windows PowerShell 5.1 turns any stderr line into a terminating error under 'Stop'.
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    try { & $exe @arguments 2>&1 | ForEach-Object { Write-Host "  $_" } }
+    try {
+        & $exe @arguments 2>&1 | ForEach-Object {
+            $line = if ($_ -is [Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+            if ($line.Trim()) { Write-Host "  $line" }  # progress bars leave blank stderr lines
+        }
+    }
     finally { $ErrorActionPreference = $previous }
     if ($LASTEXITCODE -ne 0) { throw "$([IO.Path]::GetFileName($exe)) falhou (codigo $LASTEXITCODE)" }
 }
